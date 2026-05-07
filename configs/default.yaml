@@ -1,0 +1,33 @@
+# Default configuration for the self-evolving support agent.
+# Values mirror seagent.config.Config defaults; edit to taste.
+
+# data
+kb_index: data/kb/index.jsonl
+queries: data/eval/queries.jsonl
+
+# llm backend: mock | openai
+backend: mock
+model: gpt-4o-mini
+api_base: null            # e.g. http://localhost:8000/v1 for a local vLLM server
+api_key_env: OPENAI_API_KEY
+temperature: 0.0
+
+# retrieval
+kb_top_k: 4
+epi_top_k: 3
+score_norm_k: 6.0
+epi_trust_tau: 0.45
+escalate_tau: 0.5
+kb_conf_cap: 0.85
+playbook_fire_tau: 0.7
+
+# verifier
+coverage_threshold: 1.0
+
+# evolution
+reflect_min_cluster: 2
+train_rounds: 6
+
+# runtime
+seed: 0
+workdir: experiments

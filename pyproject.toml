@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seagent"
+version = "0.1.0"
+description = "Self-Evolving Customer-Support Agent: layered memory + self-RAG + offline reflection, no weight updates"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []          # core runs on the standard library only
+
+[project.optional-dependencies]
+yaml = ["PyYAML>=6.0"]
+plot = ["matplotlib>=3.5"]
+openai = ["openai>=1.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+seagent = "seagent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

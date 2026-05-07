@@ -1,0 +1,7 @@
+# Core runtime needs NOTHING beyond the Python standard library.
+# The packages below are optional and only enable extra paths:
+
+PyYAML>=6.0        # optional: read configs/default.yaml (falls back to code defaults)
+matplotlib>=3.5    # optional: render experiments/evolution_curve.png
+openai>=1.0        # optional: backend=openai (OpenAI API or local vLLM endpoint)
+pytest>=7.0        # optional: run the test suite

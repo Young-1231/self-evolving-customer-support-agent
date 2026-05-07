@@ -1,0 +1,36 @@
+# --- python ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# --- venvs ---
+.venv*/
+venv/
+
+# --- secrets ---
+.env
+
+# --- large external / cached ---
+ref_repos/
+hf_cache/
+modelscope_cache/
+pip_cache/
+
+# --- bulky experiment intermediates (keep summaries + plots) ---
+experiments/**/traces/
+experiments/**/load_records.jsonl
+experiments/**/tickets.jsonl
+experiments/**/tickets_*.jsonl
+experiments/**/full_run.log
+experiments/**/run.log
+experiments/**/cf_run.log
+experiments/**/apr_cs_run.log
+experiments/calibration/replay.jsonl
+experiments/tau2_smoke/
+
+# --- editor ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
