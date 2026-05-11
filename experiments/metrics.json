@@ -1,0 +1,260 @@
+{
+  "static": [
+    {
+      "round": 0,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 1,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 2,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 3,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 4,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 5,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 6,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    }
+  ],
+  "episodic": [
+    {
+      "round": 0,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 1,
+      "learned_cases": 2,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 2,
+      "learned_cases": 3,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 3,
+      "learned_cases": 10,
+      "playbooks": 0,
+      "resolution_rate": 0.47368421052631576,
+      "keypoint_coverage": 0.5197368421052632,
+      "escalation_accuracy": 0.8157894736842105,
+      "escalation_f1": 0.36363636363636365,
+      "human_intervention_rate": 0.10526315789473684,
+      "n": 38.0,
+      "repeated_error_rate": 0.8
+    },
+    {
+      "round": 4,
+      "learned_cases": 17,
+      "playbooks": 0,
+      "resolution_rate": 0.5789473684210527,
+      "keypoint_coverage": 0.6600877192982456,
+      "escalation_accuracy": 0.8157894736842105,
+      "escalation_f1": 0.4615384615384615,
+      "human_intervention_rate": 0.15789473684210525,
+      "n": 38.0,
+      "repeated_error_rate": 0.6
+    },
+    {
+      "round": 5,
+      "learned_cases": 21,
+      "playbooks": 0,
+      "resolution_rate": 0.631578947368421,
+      "keypoint_coverage": 0.6951754385964912,
+      "escalation_accuracy": 0.868421052631579,
+      "escalation_f1": 0.6666666666666666,
+      "human_intervention_rate": 0.21052631578947367,
+      "n": 38.0,
+      "repeated_error_rate": 0.52
+    },
+    {
+      "round": 6,
+      "learned_cases": 24,
+      "playbooks": 0,
+      "resolution_rate": 0.7105263157894737,
+      "keypoint_coverage": 0.7653508771929824,
+      "escalation_accuracy": 0.868421052631579,
+      "escalation_f1": 0.7058823529411764,
+      "human_intervention_rate": 0.2631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 0.4
+    }
+  ],
+  "full": [
+    {
+      "round": 0,
+      "learned_cases": 0,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 1,
+      "learned_cases": 2,
+      "playbooks": 0,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 2,
+      "learned_cases": 3,
+      "playbooks": 1,
+      "resolution_rate": 0.34210526315789475,
+      "keypoint_coverage": 0.4232456140350877,
+      "escalation_accuracy": 0.7894736842105263,
+      "escalation_f1": 0.0,
+      "human_intervention_rate": 0.02631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 1.0
+    },
+    {
+      "round": 3,
+      "learned_cases": 10,
+      "playbooks": 3,
+      "resolution_rate": 0.47368421052631576,
+      "keypoint_coverage": 0.5548245614035088,
+      "escalation_accuracy": 0.8157894736842105,
+      "escalation_f1": 0.36363636363636365,
+      "human_intervention_rate": 0.10526315789473684,
+      "n": 38.0,
+      "repeated_error_rate": 0.8
+    },
+    {
+      "round": 4,
+      "learned_cases": 17,
+      "playbooks": 7,
+      "resolution_rate": 0.5789473684210527,
+      "keypoint_coverage": 0.668859649122807,
+      "escalation_accuracy": 0.8157894736842105,
+      "escalation_f1": 0.4615384615384615,
+      "human_intervention_rate": 0.15789473684210525,
+      "n": 38.0,
+      "repeated_error_rate": 0.6
+    },
+    {
+      "round": 5,
+      "learned_cases": 21,
+      "playbooks": 9,
+      "resolution_rate": 0.631578947368421,
+      "keypoint_coverage": 0.7214912280701755,
+      "escalation_accuracy": 0.868421052631579,
+      "escalation_f1": 0.6666666666666666,
+      "human_intervention_rate": 0.21052631578947367,
+      "n": 38.0,
+      "repeated_error_rate": 0.52
+    },
+    {
+      "round": 6,
+      "learned_cases": 24,
+      "playbooks": 9,
+      "resolution_rate": 0.7105263157894737,
+      "keypoint_coverage": 0.8004385964912281,
+      "escalation_accuracy": 0.868421052631579,
+      "escalation_f1": 0.7058823529411764,
+      "human_intervention_rate": 0.2631578947368421,
+      "n": 38.0,
+      "repeated_error_rate": 0.4
+    }
+  ]
+}
