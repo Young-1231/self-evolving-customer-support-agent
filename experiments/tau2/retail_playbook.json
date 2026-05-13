@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "meta": {
+    "domain": "retail",
+    "n_failed_cases": 4,
+    "train_pass1": 0.9,
+    "model": "deepseek/deepseek-chat",
+    "version": 1
+  },
+  "tips": [
+    "Always authenticate the user via email or name+zip before any other action, even if the user provides a user ID.",
+    "After authentication, retrieve user details and all order details before proposing any actions to the user.",
+    "Before any database update (cancel, modify, return, exchange), list the exact action details and obtain explicit user confirmation (\"yes\") before proceeding.",
+    "Do not skip steps or combine multiple tool calls in a single response; make only one tool call at a time and wait for the result.",
+    "When a user requests multiple actions (e.g., cancel and return), handle each action sequentially, confirming each one separately.",
+    "Use the calculate tool to provide refund totals before processing returns, and confirm the amount with the user.",
+    "If a user requests an action that requires information not yet retrieved (e.g., product details for a modification), fetch that data before proposing changes.",
+    "Transfer to a human agent only when the request cannot be handled within policy scope, and always call transfer_to_human_agents before notifying the user."
+  ]
+}

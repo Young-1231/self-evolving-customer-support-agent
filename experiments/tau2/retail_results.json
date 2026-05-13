@@ -1,0 +1,43 @@
+{
+  "domain": "retail",
+  "model": "deepseek/deepseek-chat",
+  "num_trials": 4,
+  "train_tasks": 40,
+  "train_pass1": 0.9,
+  "n_failed_distilled": 4,
+  "n_tips": 8,
+  "test_tasks": 40,
+  "metric": "official tau2 pass^k (arXiv 2406.12045), reward==1.0 = success",
+  "memory_off": {
+    "avg_reward": 0.925,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 40,
+    "total_sims": 160,
+    "pass^1": 0.925,
+    "pass^2": 0.8958333333333334,
+    "pass^3": 0.88125,
+    "pass^4": 0.875
+  },
+  "memory_on": {
+    "avg_reward": 0.93125,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 40,
+    "total_sims": 160,
+    "pass^1": 0.93125,
+    "pass^2": 0.9041666666666668,
+    "pass^3": 0.8875,
+    "pass^4": 0.875
+  },
+  "delta_pass^1": 0.006249999999999978,
+  "delta_avg_reward": 0.006249999999999978,
+  "tips": [
+    "Always authenticate the user via email or name+zip before any other action, even if the user provides a user ID.",
+    "After authentication, retrieve user details and all order details before proposing any actions to the user.",
+    "Before any database update (cancel, modify, return, exchange), list the exact action details and obtain explicit user confirmation (\"yes\") before proceeding.",
+    "Do not skip steps or combine multiple tool calls in a single response; make only one tool call at a time and wait for the result.",
+    "When a user requests multiple actions (e.g., cancel and return), handle each action sequentially, confirming each one separately.",
+    "Use the calculate tool to provide refund totals before processing returns, and confirm the amount with the user.",
+    "If a user requests an action that requires information not yet retrieved (e.g., product details for a modification), fetch that data before proposing changes.",
+    "Transfer to a human agent only when the request cannot be handled within policy scope, and always call transfer_to_human_agents before notifying the user."
+  ]
+}
