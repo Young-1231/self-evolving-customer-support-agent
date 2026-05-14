@@ -1,0 +1,43 @@
+{
+  "domain": "airline",
+  "model": "deepseek/deepseek-chat",
+  "num_trials": 4,
+  "train_tasks": 30,
+  "train_pass1": 0.8666666666666667,
+  "n_failed_distilled": 4,
+  "n_tips": 8,
+  "test_tasks": 20,
+  "metric": "official tau2 pass^k (arXiv 2406.12045), reward==1.0 = success",
+  "memory_off": {
+    "avg_reward": 0.8,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.8,
+    "pass^2": 0.7166666666666667,
+    "pass^3": 0.675,
+    "pass^4": 0.65
+  },
+  "memory_on": {
+    "avg_reward": 0.775,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.775,
+    "pass^2": 0.725,
+    "pass^3": 0.6875,
+    "pass^4": 0.65
+  },
+  "delta_pass^1": -0.025000000000000022,
+  "delta_avg_reward": -0.025000000000000022,
+  "tips": [
+    "Always obtain explicit user confirmation (yes) before performing any action that updates the booking database, including cancellations, modifications, and upgrades.",
+    "When a user requests cancellation but mentions a refund, first confirm the refund policy or check refund eligibility before proceeding, and do not cancel if the user refuses to proceed without a refund.",
+    "Before canceling a reservation, verify the cabin class; if it is basic economy and the user requests an upgrade first, process the upgrade before cancellation.",
+    "When a user asks for sums of balances (e.g., gift cards or certificates), calculate and provide the total sum, not just individual balances.",
+    "After retrieving user details, use the user's reservation list to identify all reservation IDs before calling get_reservation_details for each one.",
+    "Do not ask for reasons or perform unrelated checks (e.g., flight status) before completing the required sequence of actions for cancellation.",
+    "If a user insists on proceeding with cancellation despite being told no refund is possible, respect their decision and proceed with the cancellation.",
+    "Always transfer to a human agent only when the request cannot be handled within your scope, and use the transfer_to_human_agents tool before sending the transfer message."
+  ]
+}
