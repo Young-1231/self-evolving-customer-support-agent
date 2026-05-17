@@ -1,0 +1,84 @@
+{
+  "pb_billing_ans": {
+    "playbook_id": "pb_billing_ans",
+    "topic": "billing",
+    "state": "active",
+    "version": 2,
+    "parent_version": 1,
+    "proposer": "reflector",
+    "approver": "ops-reviewer@nimbusflow",
+    "created_at": "2026-05-28T01:25:46.185315+00:00",
+    "updated_at": "2026-05-28T01:25:46.197214+00:00",
+    "rollback_reason": null,
+    "payload": {
+      "playbook_id": "pb_billing_ans",
+      "topic": "billing",
+      "trigger_terms": [
+        "年付",
+        "月付",
+        "退款",
+        "余额"
+      ],
+      "guidance": "年付转月付的差额以 account credit 形式保留，不退回原卡，下次续费自动抵扣。",
+      "action": "answer",
+      "enabled": true,
+      "version": 1,
+      "source_case_ids": [],
+      "created_round": 0
+    }
+  },
+  "pb_escalate_all": {
+    "playbook_id": "pb_escalate_all",
+    "topic": "general",
+    "state": "active",
+    "version": 1,
+    "parent_version": null,
+    "proposer": "reflector",
+    "approver": "ops-reviewer@nimbusflow",
+    "created_at": "2026-05-28T01:24:27.316061+00:00",
+    "updated_at": "2026-05-28T01:24:27.327695+00:00",
+    "rollback_reason": null,
+    "payload": {
+      "playbook_id": "pb_escalate_all",
+      "topic": "general",
+      "trigger_terms": [
+        "怎么",
+        "如何",
+        "为什么",
+        "密码",
+        "导出"
+      ],
+      "guidance": "遇到任何不确定的问题都转人工。",
+      "action": "escalate",
+      "enabled": true,
+      "version": 1,
+      "source_case_ids": [],
+      "created_round": 0
+    }
+  },
+  "pb_escalate_howto": {
+    "playbook_id": "pb_escalate_howto",
+    "topic": "general",
+    "state": "rolled_back",
+    "version": 1,
+    "parent_version": null,
+    "proposer": "reflector",
+    "approver": "ops-reviewer@nimbusflow",
+    "created_at": "2026-05-28T01:25:46.197518+00:00",
+    "updated_at": "2026-05-28T01:25:46.209064+00:00",
+    "rollback_reason": "FAIL: 关键指标回退超阈值 -> resolution_rate 回退 0.026 (baseline=0.711 -> candidate=0.684, 容忍=0.000); escalation_f1 回退 0.039 (baseline=0.706 -> candidate=0.667, 容忍=0.000)",
+    "payload": {
+      "playbook_id": "pb_escalate_howto",
+      "topic": "general",
+      "trigger_terms": [
+        "怎么"
+      ],
+      "guidance": "遇到任何操作类（怎么…）问题一律转人工。",
+      "action": "escalate",
+      "enabled": true,
+      "version": 1,
+      "source_case_ids": [],
+      "created_round": 0
+    }
+  }
+}

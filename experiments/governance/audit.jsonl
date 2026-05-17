@@ -1,0 +1,16 @@
+{"ts": "2026-05-28T01:24:27.304066+00:00", "action": "propose", "playbook_id": "pb_billing_ans", "actor": "reflector", "version": 1, "parent_version": null, "topic": "billing"}
+{"ts": "2026-05-28T01:24:27.304657+00:00", "action": "->approved", "playbook_id": "pb_billing_ans", "actor": "ops-reviewer@nimbusflow", "from_state": "proposed"}
+{"ts": "2026-05-28T01:24:27.305085+00:00", "action": "->canary", "playbook_id": "pb_billing_ans", "actor": "release-bot", "from_state": "approved"}
+{"ts": "2026-05-28T01:24:27.315978+00:00", "action": "->active", "playbook_id": "pb_billing_ans", "actor": "release-bot", "from_state": "canary"}
+{"ts": "2026-05-28T01:24:27.316274+00:00", "action": "propose", "playbook_id": "pb_escalate_all", "actor": "reflector", "version": 1, "parent_version": null, "topic": "general"}
+{"ts": "2026-05-28T01:24:27.316515+00:00", "action": "->approved", "playbook_id": "pb_escalate_all", "actor": "ops-reviewer@nimbusflow", "from_state": "proposed"}
+{"ts": "2026-05-28T01:24:27.316965+00:00", "action": "->canary", "playbook_id": "pb_escalate_all", "actor": "release-bot", "from_state": "approved"}
+{"ts": "2026-05-28T01:24:27.327994+00:00", "action": "->active", "playbook_id": "pb_escalate_all", "actor": "release-bot", "from_state": "canary"}
+{"ts": "2026-05-28T01:25:46.185900+00:00", "action": "propose", "playbook_id": "pb_billing_ans", "actor": "reflector", "version": 2, "parent_version": 1, "topic": "billing"}
+{"ts": "2026-05-28T01:25:46.186162+00:00", "action": "->approved", "playbook_id": "pb_billing_ans", "actor": "ops-reviewer@nimbusflow", "from_state": "proposed"}
+{"ts": "2026-05-28T01:25:46.186519+00:00", "action": "->canary", "playbook_id": "pb_billing_ans", "actor": "release-bot", "from_state": "approved"}
+{"ts": "2026-05-28T01:25:46.197441+00:00", "action": "->active", "playbook_id": "pb_billing_ans", "actor": "release-bot", "from_state": "canary"}
+{"ts": "2026-05-28T01:25:46.197724+00:00", "action": "propose", "playbook_id": "pb_escalate_howto", "actor": "reflector", "version": 1, "parent_version": null, "topic": "general"}
+{"ts": "2026-05-28T01:25:46.198007+00:00", "action": "->approved", "playbook_id": "pb_escalate_howto", "actor": "ops-reviewer@nimbusflow", "from_state": "proposed"}
+{"ts": "2026-05-28T01:25:46.198466+00:00", "action": "->canary", "playbook_id": "pb_escalate_howto", "actor": "release-bot", "from_state": "approved"}
+{"ts": "2026-05-28T01:25:46.209318+00:00", "action": "->rolled_back", "playbook_id": "pb_escalate_howto", "actor": "release-bot", "from_state": "canary", "reason": "FAIL: 关键指标回退超阈值 -> resolution_rate 回退 0.026 (baseline=0.711 -> candidate=0.684, 容忍=0.000); escalation_f1 回退 0.039 (baseline=0.706 -> candidate=0.667, 容忍=0.000)"}
