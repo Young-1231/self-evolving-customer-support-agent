@@ -1,0 +1,197 @@
+{
+  "config": {
+    "backend": "mock",
+    "model": "gpt-4o-mini",
+    "kb_top_k": 4,
+    "epi_top_k": 3,
+    "train_rounds": 6,
+    "coverage_threshold": 1.0,
+    "latency_repeats": 40,
+    "seed": 0
+  },
+  "curve": [
+    {
+      "round": 0,
+      "pool_size": 0,
+      "resolution_rate": 0.3421,
+      "keypoint_coverage": 0.4232,
+      "escalation_accuracy": 0.7895,
+      "avg_inj_tokens": 411.5,
+      "avg_out_tokens": 102.237,
+      "avg_cost_usd": 0.0001230671,
+      "avg_hits": 3.974,
+      "avg_epi_hits": 0.0,
+      "avg_latency_ms": 0.14565
+    },
+    {
+      "round": 1,
+      "pool_size": 2,
+      "resolution_rate": 0.3421,
+      "keypoint_coverage": 0.4232,
+      "escalation_accuracy": 0.7895,
+      "avg_inj_tokens": 452.263,
+      "avg_out_tokens": 130.5,
+      "avg_cost_usd": 0.0001461395,
+      "avg_hits": 5.026,
+      "avg_epi_hits": 1.053,
+      "avg_latency_ms": 0.16223
+    },
+    {
+      "round": 2,
+      "pool_size": 3,
+      "resolution_rate": 0.3421,
+      "keypoint_coverage": 0.4232,
+      "escalation_accuracy": 0.7895,
+      "avg_inj_tokens": 467.737,
+      "avg_out_tokens": 130.605,
+      "avg_cost_usd": 0.0001485237,
+      "avg_hits": 5.395,
+      "avg_epi_hits": 1.421,
+      "avg_latency_ms": 0.17977
+    },
+    {
+      "round": 3,
+      "pool_size": 10,
+      "resolution_rate": 0.4737,
+      "keypoint_coverage": 0.5197,
+      "escalation_accuracy": 0.8158,
+      "avg_inj_tokens": 519.237,
+      "avg_out_tokens": 138.316,
+      "avg_cost_usd": 0.000160875,
+      "avg_hits": 6.868,
+      "avg_epi_hits": 2.895,
+      "avg_latency_ms": 0.19137
+    },
+    {
+      "round": 4,
+      "pool_size": 17,
+      "resolution_rate": 0.5789,
+      "keypoint_coverage": 0.6601,
+      "escalation_accuracy": 0.8158,
+      "avg_inj_tokens": 519.395,
+      "avg_out_tokens": 138.316,
+      "avg_cost_usd": 0.0001608987,
+      "avg_hits": 6.921,
+      "avg_epi_hits": 2.947,
+      "avg_latency_ms": 0.21291
+    },
+    {
+      "round": 5,
+      "pool_size": 21,
+      "resolution_rate": 0.6316,
+      "keypoint_coverage": 0.6952,
+      "escalation_accuracy": 0.8684,
+      "avg_inj_tokens": 521.842,
+      "avg_out_tokens": 139.605,
+      "avg_cost_usd": 0.0001620395,
+      "avg_hits": 6.921,
+      "avg_epi_hits": 2.947,
+      "avg_latency_ms": 0.24819
+    },
+    {
+      "round": 6,
+      "pool_size": 24,
+      "resolution_rate": 0.7105,
+      "keypoint_coverage": 0.7654,
+      "escalation_accuracy": 0.8684,
+      "avg_inj_tokens": 522.0,
+      "avg_out_tokens": 139.684,
+      "avg_cost_usd": 0.0001621105,
+      "avg_hits": 6.921,
+      "avg_epi_hits": 2.947,
+      "avg_latency_ms": 0.23728
+    }
+  ],
+  "analysis": {
+    "deltas": [
+      {
+        "from_round": 0,
+        "to_round": 1,
+        "d_resolution": 0.0,
+        "d_inj_tokens": 40.763,
+        "d_cost_usd": 2.30724e-05,
+        "d_latency_ms": 0.01658,
+        "d_pool_size": 2,
+        "marginal_tokens_per_1pct_resolution": null,
+        "marginal_cost_per_1pct_resolution": null
+      },
+      {
+        "from_round": 1,
+        "to_round": 2,
+        "d_resolution": 0.0,
+        "d_inj_tokens": 15.474,
+        "d_cost_usd": 2.3842e-06,
+        "d_latency_ms": 0.01754,
+        "d_pool_size": 1,
+        "marginal_tokens_per_1pct_resolution": null,
+        "marginal_cost_per_1pct_resolution": null
+      },
+      {
+        "from_round": 2,
+        "to_round": 3,
+        "d_resolution": 0.1316,
+        "d_inj_tokens": 51.5,
+        "d_cost_usd": 1.23513e-05,
+        "d_latency_ms": 0.0116,
+        "d_pool_size": 7,
+        "marginal_tokens_per_1pct_resolution": 3.9134,
+        "marginal_cost_per_1pct_resolution": 9.38549e-07
+      },
+      {
+        "from_round": 3,
+        "to_round": 4,
+        "d_resolution": 0.1052,
+        "d_inj_tokens": 0.158,
+        "d_cost_usd": 2.37e-08,
+        "d_latency_ms": 0.02154,
+        "d_pool_size": 7,
+        "marginal_tokens_per_1pct_resolution": 0.015,
+        "marginal_cost_per_1pct_resolution": 2.253e-09
+      },
+      {
+        "from_round": 4,
+        "to_round": 5,
+        "d_resolution": 0.0527,
+        "d_inj_tokens": 2.447,
+        "d_cost_usd": 1.1408e-06,
+        "d_latency_ms": 0.03528,
+        "d_pool_size": 4,
+        "marginal_tokens_per_1pct_resolution": 0.4643,
+        "marginal_cost_per_1pct_resolution": 2.16471e-07
+      },
+      {
+        "from_round": 5,
+        "to_round": 6,
+        "d_resolution": 0.0789,
+        "d_inj_tokens": 0.158,
+        "d_cost_usd": 7.1e-08,
+        "d_latency_ms": -0.01091,
+        "d_pool_size": 3,
+        "marginal_tokens_per_1pct_resolution": 0.02,
+        "marginal_cost_per_1pct_resolution": 8.999e-09
+      }
+    ],
+    "knee_round": 4,
+    "knee_reason": "cost-efficiency knee: marginal cost is cheapest here (0.0 tokens per +1% resolution); beyond this, latency keeps rising while token/hit gains are capped by top-k, so each extra point of resolution costs more.",
+    "knee_point": {
+      "round": 4,
+      "pool_size": 17,
+      "resolution_rate": 0.5789,
+      "keypoint_coverage": 0.6601,
+      "escalation_accuracy": 0.8158,
+      "avg_inj_tokens": 519.395,
+      "avg_out_tokens": 138.316,
+      "avg_cost_usd": 0.0001608987,
+      "avg_hits": 6.921,
+      "avg_epi_hits": 2.947,
+      "avg_latency_ms": 0.21291
+    },
+    "dead_zone_until_round": 2,
+    "dead_zone_token_waste": 56.237,
+    "first_gain_round": 3,
+    "token_saturation_round": 4,
+    "base_resolution": 0.3421,
+    "final_resolution": 0.7105,
+    "total_resolution_gain": 0.3684
+  }
+}
