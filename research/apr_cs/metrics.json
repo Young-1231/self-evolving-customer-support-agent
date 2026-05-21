@@ -1,0 +1,64 @@
+{
+  "tickets": [
+    "t01-billing-refund",
+    "t02-login-lockout",
+    "t03-api-rate-limit",
+    "t04-data-export",
+    "t05-plan-upgrade",
+    "t06-easy-greeting",
+    "t07-2fa-reset",
+    "t08-integration-slack"
+  ],
+  "tip_pool": [
+    "billing_refund_proration",
+    "login_lockout",
+    "api_rate_limit",
+    "data_export",
+    "plan_change_proration",
+    "twofa_recovery",
+    "integration_reauth",
+    "noise_chargeback",
+    "noise_voice_call",
+    "noise_seat_upgrade"
+  ],
+  "counterfactual_scores": {
+    "billing_refund_proration": 0.125,
+    "login_lockout": 0.125,
+    "api_rate_limit": 0.125,
+    "data_export": 0.125,
+    "plan_change_proration": 0.0,
+    "twofa_recovery": 0.125,
+    "integration_reauth": 0.0,
+    "noise_chargeback": -0.125,
+    "noise_voice_call": -0.125,
+    "noise_seat_upgrade": -0.125
+  },
+  "off_anchor_pass1": 0.5,
+  "base_pass1_all_tips": 0.75,
+  "metrics_by_condition": {
+    "all": {
+      "resolution_rate": 0.75,
+      "keypoint_coverage": 0.8587750000000001,
+      "human_intervention_rate": 0.25,
+      "avg_tips_injected": 10.0
+    },
+    "top_k_relevance": {
+      "resolution_rate": 1.0,
+      "keypoint_coverage": 0.91135,
+      "human_intervention_rate": 0.0,
+      "avg_tips_injected": 3.5
+    },
+    "cf_weighted": {
+      "resolution_rate": 1.0,
+      "keypoint_coverage": 0.9299250000000001,
+      "human_intervention_rate": 0.0,
+      "avg_tips_injected": 2.75
+    },
+    "conf_gated": {
+      "resolution_rate": 1.0,
+      "keypoint_coverage": 0.943225,
+      "human_intervention_rate": 0.0,
+      "avg_tips_injected": 2.25
+    }
+  }
+}

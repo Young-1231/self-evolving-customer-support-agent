@@ -1,0 +1,58 @@
+{
+  "domain": "airline",
+  "model": "deepseek/deepseek-chat",
+  "route_mode": "cf_weighted",
+  "top_k": 4,
+  "cf_train_tasks": 8,
+  "cf_scores": {
+    "Always obtain explicit user confirmation (yes) before performing any action that updates the booking database, including cancellations, modifications, and upgrades.": 0.0,
+    "When a user requests cancellation but mentions a refund, first confirm the refund policy or check refund eligibility before proceeding, and do not cancel if the user refuses to proceed without a refund.": 0.125,
+    "Before canceling a reservation, verify the cabin class; if it is basic economy and the user requests an upgrade first, process the upgrade before cancellation.": 0.125,
+    "When a user asks for sums of balances (e.g., gift cards or certificates), calculate and provide the total sum, not just individual balances.": 0.0,
+    "After retrieving user details, use the user's reservation list to identify all reservation IDs before calling get_reservation_details for each one.": 0.125,
+    "Do not ask for reasons or perform unrelated checks (e.g., flight status) before completing the required sequence of actions for cancellation.": 0.125,
+    "If a user insists on proceeding with cancellation despite being told no refund is possible, respect their decision and proceed with the cancellation.": 0.25,
+    "Always transfer to a human agent only when the request cannot be handled within your scope, and use the transfer_to_human_agents tool before sending the transfer message.": 0.125
+  },
+  "cf_base_pass1": 0.875,
+  "memory_off_baseline": {
+    "avg_reward": 0.8,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.8,
+    "pass^2": 0.7166666666666667,
+    "pass^3": 0.675,
+    "pass^4": 0.65
+  },
+  "memory_on_naive_all_tips": {
+    "avg_reward": 0.775,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.775,
+    "pass^2": 0.725,
+    "pass^3": 0.6875,
+    "pass^4": 0.65
+  },
+  "memory_on_apr_cs_top_k_relevance": {
+    "avg_reward": 0.7875,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.7875,
+    "pass^2": 0.725,
+    "pass^3": 0.6625,
+    "pass^4": 0.6
+  },
+  "memory_on_apr_cs_cf_weighted": {
+    "avg_reward": 0.7875,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.7875,
+    "pass^2": 0.675,
+    "pass^3": 0.6,
+    "pass^4": 0.55
+  }
+}
