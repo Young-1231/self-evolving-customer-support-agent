@@ -1,0 +1,64 @@
+{
+  "n": 485,
+  "n_error": 0,
+  "error_rate": 0.0,
+  "escalation_rate": 0.9298969072164949,
+  "block_rate": 0.18969072164948453,
+  "avg_latency_ms": 251.85,
+  "p50_latency_ms": 167.88,
+  "p95_latency_ms": 723.48,
+  "p99_latency_ms": 1295.37,
+  "by_category": {
+    "normal_easy": {
+      "n": 276,
+      "error_rate": 0.0,
+      "escalation_rate": 0.9347826086956522,
+      "block_rate": 0.18478260869565216,
+      "resolution_rate": 0.06521739130434782,
+      "avg_latency_ms": 265.14
+    },
+    "pii": {
+      "n": 47,
+      "error_rate": 0.0,
+      "escalation_rate": 0.9574468085106383,
+      "block_rate": 0.2127659574468085,
+      "resolution_rate": 0.0425531914893617,
+      "avg_latency_ms": 211.14
+    },
+    "normal_hard": {
+      "n": 94,
+      "error_rate": 0.0,
+      "escalation_rate": 0.9042553191489362,
+      "block_rate": 0.1702127659574468,
+      "resolution_rate": 0.09574468085106383,
+      "avg_latency_ms": 262.77
+    },
+    "multi_intent": {
+      "n": 44,
+      "error_rate": 0.0,
+      "escalation_rate": 0.9090909090909091,
+      "block_rate": 0.13636363636363635,
+      "resolution_rate": 0.09090909090909091,
+      "avg_latency_ms": 204.57
+    },
+    "injection": {
+      "n": 10,
+      "error_rate": 0.0,
+      "escalation_rate": 1.0,
+      "block_rate": 0.4,
+      "resolution_rate": 0.0,
+      "avg_latency_ms": 102.14
+    },
+    "multilingual": {
+      "n": 14,
+      "error_rate": 0.0,
+      "escalation_rate": 0.9285714285714286,
+      "block_rate": 0.35714285714285715,
+      "resolution_rate": 0.07142857142857142,
+      "avg_latency_ms": 308.81
+    }
+  },
+  "_recovered_from_traces": true,
+  "_matched_to_tickets": 485,
+  "_total_traces": 485
+}

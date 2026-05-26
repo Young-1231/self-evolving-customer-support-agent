@@ -1,0 +1,125 @@
+{
+  "nimbusflow": [
+    {
+      "escalate_tau": 0.3,
+      "kb_conf_cap": 0.5,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.3,
+      "kb_conf_cap": 0.7,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.3,
+      "kb_conf_cap": 0.85,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.4,
+      "kb_conf_cap": 0.5,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.4,
+      "kb_conf_cap": 0.7,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.4,
+      "kb_conf_cap": 0.85,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.5,
+      "kb_conf_cap": 0.5,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.5,
+      "kb_conf_cap": 0.7,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.5,
+      "kb_conf_cap": 0.85,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.6,
+      "kb_conf_cap": 0.7,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.6,
+      "kb_conf_cap": 0.85,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.0,
+      "esc_correct_rate": 0.8157894736842105,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.7,
+      "kb_conf_cap": 0.7,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.02631578947368421,
+      "esc_correct_rate": 0.7894736842105263,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.7,
+      "kb_conf_cap": 0.85,
+      "resolution_rate": 0.23684210526315788,
+      "escalation_rate": 0.02631578947368421,
+      "esc_correct_rate": 0.7894736842105263,
+      "objective": 0.23684210526315788
+    },
+    {
+      "escalate_tau": 0.6,
+      "kb_conf_cap": 0.5,
+      "resolution_rate": 0.0,
+      "escalation_rate": 1.0,
+      "esc_correct_rate": 0.18421052631578946,
+      "objective": -0.35
+    },
+    {
+      "escalate_tau": 0.7,
+      "kb_conf_cap": 0.5,
+      "resolution_rate": 0.0,
+      "escalation_rate": 1.0,
+      "esc_correct_rate": 0.18421052631578946,
+      "objective": -0.35
+    }
+  ],
+  "ecommerce": []
+}

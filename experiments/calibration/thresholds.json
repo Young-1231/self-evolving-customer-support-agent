@@ -1,0 +1,16 @@
+{
+  "domains": {
+    "default": {
+      "escalate_tau": 0.5,
+      "kb_conf_cap": 0.85
+    },
+    "ecommerce": {
+      "escalate_tau": 0.35,
+      "kb_conf_cap": 0.7
+    },
+    "nimbusflow": {
+      "escalate_tau": 0.3,
+      "kb_conf_cap": 0.5
+    }
+  }
+}
