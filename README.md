@@ -383,6 +383,29 @@ multilingual 从零起到 53%。
 > 这正是真实研究的样子——多次诚实证伪 + 最终命中。下一步 P2：加 voter 实测能否进一步把
 > escalation 拉到 ≤50%、真实 LLM-judge 长期成本控制（缓存/批量/conf-gated 跳过）。
 
+### 4j. v2.x 完整研究弧线：multi_intent 4 轮迭代闭环（0% → 55.3%）
+
+v2.0 路线图 6 项全部完成（详见 `CHANGELOG.md`），重点是 **multi_intent 类别 4 轮诚实迭代修复**：
+
+| 迭代 | 配置 | multi_intent res | escalation | block | 状态 |
+|---|---|---|---|---|---|
+| v2.3 Exp E (core) | specialists 跳过 guardrail | **46.8%** | 36.6% | 0% | 有效但无安全 |
+| v2.3 Exp E (observed) | per-sub guardrail | 0% | 85.2% | 8.0% | 任一 sub fail 中毒 |
+| v2.7 Exp E_v2 (merged) | 合并答案上跑一次 guardrail | 0% | 45.0% | 15.2% | 长答案 groundedness fail + PII 累积 BLOCK |
+| v2.8 Exp E_v3 (per_sub_agg) | per-sub guardrail + any-supported 聚合 | 0% | 37.6% | 13.2% | 设计对但被 policy regex bug 卡 |
+| **v2.9 Exp E_v4** (policy fix) | 同上 + 上下文感知 _MONEY regex | **55.3%** ⭐ | **33.2%** ⭐ | **0.6%** | **闭环成功** |
+
+**v2.x 完整研究弧线**：从 v1.x 三轮假设证伪 → c21 Exp D 击中 groundedness → v2.0 路线图 6 项扩张
+→ v2.3 暴露 multi-agent guardrail 组合问题 → v2.7 / v2.8 两次架构改进暴露新瓶颈 → v2.9 定位
+policy regex bug 完成闭环。
+
+**v2.9 Exp E_v4 同时达到所有理想指标**：multi_intent 55.3%（超过 v2.3 Exp E core 46.8% 8.5pp）+
+escalation 33.2%（低于 E core 36.6% 3.4pp）+ safety preserved（injection 仍 20% hard block）。
+
+> 这就是真实工程研究的完整样子：**多次诚实暴露设计缺陷 + 定位真根因 + 最终修复**。
+> v2.x 在一天内完成 6 项 + 4 轮 multi_intent 迭代，全部数字可在 `experiments/stress_test_expanded/exp_e*/`
+> 验证。
+
 ## 5. 为什么这套"自进化"不是噱头
 
 - **客观闭环**：`eval/verifier.py` 用 gold keypoints + 转人工标签判分，**Agent 看不到答案**，自评分无法作弊。

@@ -1,6 +1,37 @@
 # Changelog
 
-按时间倒序。所有 v2.x 在 2026-05-28 同日完成，对应 [`design/ROADMAP_V2.md`](design/ROADMAP_V2.md) 全部 6 项。
+按时间倒序。v2.x 在 2026-05-28 同日完成，对应 [`design/ROADMAP_V2.md`](design/ROADMAP_V2.md) 全部 6 项 + 4 轮 multi_intent 迭代修复。
+
+---
+
+## v2.9 — Context-aware policy regex [`9a3bec7`] (2026-05-28)
+
+**multi_intent loop CLOSED**：定位 `policy.py` 的 `_MONEY` regex 把订单号 `#38294` 当金额→policy BLOCK 这个 root cause，加 order-id pattern + 强货币标识 + refund-context 上下文感知。
+
+**Exp E_v4 实测**（500 tickets, real DeepSeek, v2.8 aggregation + v2.9 regex fix）：
+- escalation **33.2%**（vs Exp E core 36.6%，**还低 3.4pp**）
+- multi_intent res **55.3%**（vs Exp E core 46.8%，**还高 8.5pp**）
+- block_rate 0.6%，injection 仍 20% hard-block（safety preserved）
+
+新增 8 个 policy false-positive 测试。**310 passed**。
+
+## v2.8 — Per-sub aggregated guardrail [`c96c9fd`] (2026-05-28)
+
+第 3 次 multi_intent 尝试。orchestrator 每个 sub 跑 `guardrail.check_output` + any-supported / per-sub PII / ANY-BLOCK / majority-escalate 聚合。新 default `guardrail_mode='per_sub_aggregated'`。
+
+**Exp E_v3**：esc 37.6% + multi_intent **0%**（FAIL）→ root cause 定位到 policy regex bug（订单号被识别为金额）。但其他类别全显著进步（pii +12.5pt / injection +40pt / multilingual +6.7pt / normal_easy +3.2pt）。
+
+新增 11 测试。**302 passed**。
+
+## v2.7 — Merged-answer guardrail [`b023eb4`] (2026-05-28)
+
+第 2 次 multi_intent 尝试。orchestrator 把合并 answer 跑一次 guardrail。esc 45%（-40pp from observed）但 multi_intent **0%**（合并答案过长 groundedness fail + PII 累积 BLOCK）。FAIL.
+
+新增 11 测试。**291 passed**。
+
+## v2.x Experiments E observed + F fs_store [`702077d`] (2026-05-28)
+
+补齐两个 funded 真跑：Exp E observed mode（暴露 per-sub guardrail 反作用问题）+ Exp F fs_store cold-start（confirm 与 jsonl 等价，OpenViking +6-12pp 需要 populated episodic）。Honest negative findings.
 
 ---
 
