@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from ..config import Config
+from ..hooks.types import HookContext, HookPoint
 from ..llm.base import LLMBackend, Passage
 from ..memory.episodic import EpisodicMemory
 from ..memory.procedural import ProceduralMemory
@@ -46,6 +47,7 @@ class SupportAgent:
         guardrail: object = None,   # optional seagent.guardrails.GuardrailPipeline
         tracer: object = None,      # optional seagent.obs.Tracer
         calibrator: object = None,  # optional seagent.calibration.DomainCalibrator
+        hook_registry: object = None,  # optional seagent.hooks.HookRegistry
     ):
         self.cfg = cfg
         self.backend = backend
@@ -58,13 +60,27 @@ class SupportAgent:
         # falls back to cfg.escalate_tau / cfg.kb_conf_cap, i.e. behaviour is
         # bit-for-bit identical to the pre-calibration code path.
         self.calibrator = calibrator
+        # v2.1 R1: optional lifecycle hook registry.  When ``None`` *no* hook
+        # ever fires (``_fire`` is a strict no-op), so the c21 Exp D code path
+        # — and all 142 pre-existing tests — are byte-for-byte preserved.
+        self.hook_registry = hook_registry
         self.critic = Critic(cfg, backend)
         self._turn = 0
 
+    # --- internal: fire a lifecycle hook (no-op when no registry wired) ---
+    def _fire(self, point: "HookPoint", ctx: "HookContext") -> "HookContext":
+        if self.hook_registry is None:
+            return ctx
+        return self.hook_registry.fire(point, ctx)
+
     def handle(self, query: str) -> AgentResult:
         """Plain self-RAG path. Guardrails/tracing run only if wired in
-        (production path), so the controlled-ablation harness stays untouched."""
-        if self.guardrail is None and self.tracer is None:
+        (production path), so the controlled-ablation harness stays untouched.
+
+        When a ``hook_registry`` is wired in we also take the observed path so
+        hooks have a place to fire even if guardrail/tracer aren't configured.
+        """
+        if self.guardrail is None and self.tracer is None and self.hook_registry is None:
             return self._handle_core(query)
         return self._handle_observed(query)
 
@@ -101,11 +117,22 @@ class SupportAgent:
         trace = tr.start_turn(turn=self._turn, query=query, model=getattr(self.cfg, "model", "")) if tr is not None else None
         trace_id = getattr(trace, "trace_id", None)
 
+        # Shared HookContext flowing through all lifecycle points.  Allocated
+        # eagerly so hook_registry=None still works (we just never .fire()).
+        hctx = HookContext(point=HookPoint.PRE_INPUT, query=query, trace_id=trace_id)
+        hctx = self._fire(HookPoint.PRE_INPUT, hctx)
+        # Hooks may rewrite the raw query (rare but supported).
+        if hctx.query != query:
+            query = hctx.query
+
         # input guardrail: block prompt-injection, redact PII before anything else
         gverdict, gblocked = "allow", False
         if self.guardrail is not None:
             inp = self.guardrail.check_input(query)
             if getattr(inp, "blocked", False):
+                hctx.guardrail_report = inp
+                hctx.escalate = True
+                hctx = self._fire(HookPoint.ON_BLOCK, hctx)
                 if tr is not None:
                     tr.end_turn(confidence=0.0, escalate=True,
                                 guardrail_verdict=str(getattr(inp, "action", "block")).lower(),
@@ -119,26 +146,48 @@ class SupportAgent:
         else:
             query_safe = query
 
+        hctx.query_safe = query_safe
+        hctx = self._fire(HookPoint.POST_INPUT, hctx)
+        # POST_INPUT hooks may rewrite query_safe (e.g. extra PII layer)
+        if hctx.query_safe != query_safe:
+            query_safe = hctx.query_safe
+
         if tr is not None:
             with tr.span("retrieval"):
                 contexts, epi, pb = self._retrieve(query_safe)
             tr.set_hits(contexts)
+        else:
+            contexts, epi, pb = self._retrieve(query_safe)
+
+        hctx.contexts = contexts
+        hctx = self._fire(HookPoint.PRE_GENERATION, hctx)
+
+        if tr is not None:
             with tr.span("generation"):
                 answer = self.backend.generate_answer(query_safe, contexts)
-            kb_hits = [p for p in contexts if p.source == "kb"]
-            thresholds = self._effective_thresholds(query_safe, kb_hits)
+        else:
+            answer = self.backend.generate_answer(query_safe, contexts)
+
+        kb_hits = [p for p in contexts if p.source == "kb"]
+        thresholds = self._effective_thresholds(query_safe, kb_hits)
+        if tr is not None:
             with tr.span("critic"):
                 conf = self._confidence_with(thresholds, query_safe, answer, contexts)
         else:
-            contexts, epi, pb = self._retrieve(query_safe)
-            answer = self.backend.generate_answer(query_safe, contexts)
-            kb_hits = [p for p in contexts if p.source == "kb"]
-            thresholds = self._effective_thresholds(query_safe, kb_hits)
             conf = self._confidence_with(thresholds, query_safe, answer, contexts)
 
+        hctx.answer = answer
+        hctx.confidence = conf
+        hctx = self._fire(HookPoint.POST_GENERATION, hctx)
+        # POST_GENERATION hooks may rewrite the answer pre-guard
+        if hctx.answer != answer:
+            answer = hctx.answer
+
         escalate = self._decide_escalation(conf, epi, pb, thresholds=thresholds)
+        hctx.escalate = escalate
         out_report = None
         if self.guardrail is not None:
+            hctx = self._fire(HookPoint.PRE_OUTPUT_GUARD, hctx)
             if tr is not None:
                 with tr.span("guardrail"):
                     out_report = self.guardrail.check_output(answer, contexts)
@@ -151,6 +200,28 @@ class SupportAgent:
                 escalate = True
             gverdict = action.lower()
             gblocked = bool(getattr(out_report, "blocked", False))
+            # expose the report to POST_OUTPUT_GUARD hooks so they can
+            # rewrite groundedness / append reasons / audit
+            hctx.answer = answer
+            hctx.escalate = escalate
+            hctx.guardrail_report = out_report
+            hctx = self._fire(HookPoint.POST_OUTPUT_GUARD, hctx)
+            # apply hook-driven overrides
+            if hctx.answer != answer:
+                answer = hctx.answer
+            if hctx.escalate and not escalate:
+                escalate = True
+            if hctx.metadata.get("force_block"):
+                gblocked = True
+                gverdict = "block"
+
+        if escalate:
+            hctx.escalate = True
+            hctx = self._fire(HookPoint.ON_ESCALATE, hctx)
+            # ON_ESCALATE hooks can also rewrite the final answer / decision
+            if hctx.answer != answer:
+                answer = hctx.answer
+            escalate = bool(hctx.escalate)
 
         if tr is not None:
             in_tok, out_tok, cost = self._usage(query_safe, contexts, answer)
