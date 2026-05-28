@@ -1,0 +1,97 @@
+{
+  "n": 500,
+  "n_success": 500,
+  "n_error": 0,
+  "error_rate": 0.0,
+  "avg_latency_ms": 4887.47,
+  "p50_latency_ms": 4820.35,
+  "p95_latency_ms": 6583.02,
+  "p99_latency_ms": 7249.48,
+  "min_latency_ms": 2425.05,
+  "max_latency_ms": 8473.27,
+  "sum_latency_s": 2443.734,
+  "avg_cost_usd": 0.0,
+  "total_cost_usd": 0.0,
+  "escalation_rate": 0.366,
+  "block_rate": 0.0,
+  "by_category": {
+    "multi_intent": {
+      "n": 47,
+      "n_err": 0,
+      "n_escalate": 25,
+      "n_block": 0,
+      "lat_sum": 250236.05299999999,
+      "error_rate": 0.0,
+      "escalation_rate": 0.5319,
+      "block_rate": 0.0,
+      "avg_latency_ms": 5324.17,
+      "resolution_rate": 0.4681
+    },
+    "normal_easy": {
+      "n": 284,
+      "n_err": 0,
+      "n_escalate": 72,
+      "n_block": 0,
+      "lat_sum": 1331702.065,
+      "error_rate": 0.0,
+      "escalation_rate": 0.2535,
+      "block_rate": 0.0,
+      "avg_latency_ms": 4689.09,
+      "resolution_rate": 0.7465
+    },
+    "pii": {
+      "n": 48,
+      "n_err": 0,
+      "n_escalate": 20,
+      "n_block": 0,
+      "lat_sum": 222484.583,
+      "error_rate": 0.0,
+      "escalation_rate": 0.4167,
+      "block_rate": 0.0,
+      "avg_latency_ms": 4635.1,
+      "resolution_rate": 0.5833
+    },
+    "multilingual": {
+      "n": 15,
+      "n_err": 0,
+      "n_escalate": 8,
+      "n_block": 0,
+      "lat_sum": 70974.539,
+      "error_rate": 0.0,
+      "escalation_rate": 0.5333,
+      "block_rate": 0.0,
+      "avg_latency_ms": 4731.64,
+      "resolution_rate": 0.4667
+    },
+    "normal_hard": {
+      "n": 96,
+      "n_err": 0,
+      "n_escalate": 52,
+      "n_block": 0,
+      "lat_sum": 517477.85999999987,
+      "error_rate": 0.0,
+      "escalation_rate": 0.5417,
+      "block_rate": 0.0,
+      "avg_latency_ms": 5390.39,
+      "resolution_rate": 0.4583
+    },
+    "injection": {
+      "n": 10,
+      "n_err": 0,
+      "n_escalate": 6,
+      "n_block": 0,
+      "lat_sum": 50859.133,
+      "error_rate": 0.0,
+      "escalation_rate": 0.6,
+      "block_rate": 0.0,
+      "avg_latency_ms": 5085.91,
+      "resolution_rate": 0.4
+    }
+  },
+  "router_stats": {
+    "n_calls": 500,
+    "n_cache_hits": 0,
+    "n_parse_fail": 0
+  },
+  "wallclock_s": 154.68
+}
