@@ -80,6 +80,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from ..agent.support_agent import AgentResult
 from ..llm.base import Passage
+from .handoff import HandoffRequest
 from .router import IntentRouter, SubIntent
 from .specialist import SpecialistAgent
 
@@ -87,6 +88,9 @@ from .specialist import SpecialistAgent
 _MAX_FANOUT_WORKERS = 4  # protect downstream provider QPS per ticket
 
 _VALID_GUARDRAIL_MODES = ("per_sub_aggregated", "merged", "per_sub", "none")
+
+# v3.2 sentinel target for human escalation
+_HUMAN_TARGET = "human"
 
 
 class MultiAgentOrchestrator:
@@ -100,6 +104,8 @@ class MultiAgentOrchestrator:
         max_fanout_workers: int = _MAX_FANOUT_WORKERS,
         guardrail: Optional[object] = None,
         guardrail_mode: str = "per_sub_aggregated",
+        enable_mid_flight_handoff: bool = False,
+        max_handoff_hops: int = 1,
     ) -> None:
         if not specialists:
             raise ValueError("specialists must be non-empty")
@@ -119,6 +125,10 @@ class MultiAgentOrchestrator:
         self.max_fanout_workers = max(1, int(max_fanout_workers))
         self.guardrail = guardrail
         self.guardrail_mode = guardrail_mode
+        # v3.2 OpenAI Agents SDK 2026-style mid-flight handoff.  Default OFF
+        # so all v2.x call sites and tests keep byte-identical behaviour.
+        self.enable_mid_flight_handoff = bool(enable_mid_flight_handoff)
+        self.max_handoff_hops = max(0, int(max_handoff_hops))
 
         # v2.7/v2.8: when guardrail_mode is 'merged' or 'per_sub_aggregated' and
         # specialists were built in mode='observed', their per-sub guardrail
@@ -151,6 +161,11 @@ class MultiAgentOrchestrator:
         self.n_agg_block = 0
         self.n_agg_escalate = 0
         self.n_agg_rewrite = 0
+        # v3.2 mid-flight handoff counters
+        self.n_handoff_emitted = 0     # specialist emitted a HandoffRequest
+        self.n_handoff_dispatched = 0  # orchestrator actually re-dispatched
+        self.n_handoff_to_human = 0
+        self.n_handoff_loops_blocked = 0  # blocked by max_handoff_hops
         self._stats_lock = threading.Lock()
 
     def _downgrade_specialists_for_merged(self) -> None:
@@ -209,11 +224,22 @@ class MultiAgentOrchestrator:
     def _dispatch_single(self, query: str, si: SubIntent) -> AgentResult:
         spec = self._resolve_specialist(si.label)
         try:
-            return spec.handle(si.sub_query or query)
+            result = spec.handle(si.sub_query or query)
         except Exception as e:
             with self._stats_lock:
                 self.n_specialist_errors += 1
             return self._fallback_error_result(query, [si], str(e))
+        # v3.2: respect a specialist-emitted mid-flight handoff request when
+        # the feature is enabled.  No-op when disabled (default) so existing
+        # tests stay byte-identical.
+        if self.enable_mid_flight_handoff:
+            result = self._maybe_apply_handoff(
+                query=si.sub_query or query,
+                origin_label=si.label,
+                result=result,
+                hops_used=0,
+            )
+        return result
 
     # ---- multi-intent path: fan-out + merge (legacy / per_sub / none) ----
     def _dispatch_many(self, query: str, intents: List[SubIntent]) -> AgentResult:
@@ -523,6 +549,15 @@ class MultiAgentOrchestrator:
             setattr(out, "sub_intents", [si.to_dict() for si in intents])
             setattr(out, "n_sub_errors", sum(1 for e in errors if e is not None))
             setattr(out, "agg_guardrail_action", bundle_action)
+            # v3.2: aggregate per-sub handoff traces
+            bundle_trace: List[Dict[str, Any]] = []
+            for r in results:
+                if r is None:
+                    continue
+                for evt in getattr(r, "handoff_trace", []) or []:
+                    bundle_trace.append(evt)
+            if bundle_trace:
+                setattr(out, "handoff_trace", bundle_trace)
             setattr(
                 out, "agg_sub_breakdown",
                 {
@@ -566,7 +601,151 @@ class MultiAgentOrchestrator:
 
     def _run_one(self, si: SubIntent) -> AgentResult:
         spec = self._resolve_specialist(si.label)
-        return spec.handle(si.sub_query)
+        result = spec.handle(si.sub_query)
+        # v3.2: mid-flight handoff for the multi-intent fan-out path.  Each
+        # sub-result is independently allowed to hand off (up to
+        # max_handoff_hops), and the merged answer reflects the *post-handoff*
+        # sub-results.  Disabled by default for backwards compat.
+        if self.enable_mid_flight_handoff:
+            result = self._maybe_apply_handoff(
+                query=si.sub_query,
+                origin_label=si.label,
+                result=result,
+                hops_used=0,
+            )
+        return result
+
+    # ---- v3.2 mid-flight handoff dispatcher -----------------------------
+    def _maybe_apply_handoff(
+        self,
+        query: str,
+        origin_label: str,
+        result: AgentResult,
+        hops_used: int,
+    ) -> AgentResult:
+        """If the result carries a HandoffRequest and hops are available,
+        dispatch to the target domain and merge the result.  Otherwise
+        return the original result unchanged.
+
+        Loop suppression: ``max_handoff_hops`` caps the depth at 1 by
+        default; we also short-circuit when the next target equals the
+        domain that just emitted the request (would loop trivially).
+        """
+        req: Optional[HandoffRequest] = getattr(result, "handoff_request", None)
+        if req is None:
+            return result
+        with self._stats_lock:
+            self.n_handoff_emitted += 1
+
+        prior_trace = list(getattr(result, "handoff_trace", []) or [])
+
+        # human target: escalate the whole turn, do not re-dispatch.
+        if req.target_domain == _HUMAN_TARGET:
+            with self._stats_lock:
+                self.n_handoff_to_human += 1
+            try:
+                result.escalate = True
+            except Exception:
+                pass
+            self._append_handoff_trace_event(result, req, dispatched=False)
+            return result
+
+        # hop budget exhausted?
+        if hops_used >= self.max_handoff_hops:
+            with self._stats_lock:
+                self.n_handoff_loops_blocked += 1
+            self._append_handoff_trace_event(result, req, dispatched=False)
+            return result
+
+        # trivial loop guard: never bounce back to the same specialist
+        if req.target_domain == origin_label:
+            with self._stats_lock:
+                self.n_handoff_loops_blocked += 1
+            self._append_handoff_trace_event(result, req, dispatched=False)
+            return result
+
+        target_spec = self._resolve_specialist(req.target_domain)
+        try:
+            # Hand the *target* specialist a query enriched with the prior
+            # specialist's context_summary so the next agent doesn't have
+            # to re-derive it.  Mirrors OpenAI Agents SDK behaviour where
+            # the SDK passes the context to the new active agent.
+            enriched_query = self._compose_handoff_query(query, req)
+            next_result = target_spec.handle(enriched_query)
+        except Exception as e:
+            with self._stats_lock:
+                self.n_specialist_errors += 1
+            # handoff dispatch failure: fall back to the original result
+            self._append_handoff_trace_event(
+                result, req, dispatched=False, error=str(e)
+            )
+            return result
+
+        # carry forward any pre-existing trace events from ``result``
+        # onto the new result so the full handoff chain is visible at the
+        # top-level AgentResult.
+        if prior_trace:
+            try:
+                setattr(next_result, "handoff_trace", prior_trace)
+            except Exception:
+                pass
+        # record the actual dispatch event on the next result
+        self._append_handoff_trace_event(next_result, req, dispatched=True)
+        try:
+            # propagate the original specialist's domain so the trace can
+            # show the full chain (origin -> target).
+            setattr(next_result, "handoff_origin_domain", origin_label)
+        except Exception:
+            pass
+        with self._stats_lock:
+            self.n_handoff_dispatched += 1
+        # recursive handoff (capped) — target may itself want to hand off,
+        # but with hops_used incremented so we never spin forever.
+        return self._maybe_apply_handoff(
+            query=enriched_query,
+            origin_label=req.target_domain,
+            result=next_result,
+            hops_used=hops_used + 1,
+        )
+
+    @staticmethod
+    def _compose_handoff_query(query: str, req: HandoffRequest) -> str:
+        """Compose the new query: original + a single-line context hint.
+
+        Deterministic — no LLM call — so tests can pin behaviour.
+        """
+        summary = (req.context_summary or "").strip()
+        if not summary:
+            return query
+        return f"{query}\n\n[handoff context] {summary}"
+
+    @staticmethod
+    def _append_handoff_trace_event(
+        result: AgentResult,
+        req: HandoffRequest,
+        *,
+        dispatched: bool,
+        error: Optional[str] = None,
+    ) -> None:
+        """Append an OpenAI Agents SDK 2026 style tool-call event to the
+        result's ``handoff_trace`` list (duck-typed extension).
+
+        Each event is the dict produced by ``req.to_tool_call_format()``
+        plus a ``dispatched`` flag and optional ``error`` text.
+        """
+        try:
+            trace = list(getattr(result, "handoff_trace", []) or [])
+        except Exception:
+            trace = []
+        evt = req.to_tool_call_format()
+        evt["dispatched"] = bool(dispatched)
+        if error:
+            evt["error"] = error
+        trace.append(evt)
+        try:
+            setattr(result, "handoff_trace", trace)
+        except Exception:
+            pass
 
     def _resolve_specialist(self, label: str) -> SpecialistAgent:
         if label in self.specialists:
@@ -649,6 +828,19 @@ class MultiAgentOrchestrator:
             setattr(merged, "n_sub_errors", sum(1 for e in errors if e is not None))
         except Exception:
             pass
+        # v3.2: collect per-sub handoff traces into a single bundle trace so
+        # the merged AgentResult shows the full fan-out picture.
+        try:
+            bundle_trace: List[Dict[str, Any]] = []
+            for r in results:
+                if r is None:
+                    continue
+                for evt in getattr(r, "handoff_trace", []) or []:
+                    bundle_trace.append(evt)
+            if bundle_trace:
+                setattr(merged, "handoff_trace", bundle_trace)
+        except Exception:
+            pass
         return merged
 
     # ---- fallback ----
@@ -674,6 +866,10 @@ class MultiAgentOrchestrator:
                 "n_agg_block": self.n_agg_block,
                 "n_agg_escalate": self.n_agg_escalate,
                 "n_agg_rewrite": self.n_agg_rewrite,
+                "n_handoff_emitted": self.n_handoff_emitted,
+                "n_handoff_dispatched": self.n_handoff_dispatched,
+                "n_handoff_to_human": self.n_handoff_to_human,
+                "n_handoff_loops_blocked": self.n_handoff_loops_blocked,
                 "router_calls": int(getattr(self.router, "n_calls", 0)),
                 "router_cache_hits": int(getattr(self.router, "n_cache_hits", 0)),
                 "router_parse_fail": int(getattr(self.router, "n_parse_fail", 0)),

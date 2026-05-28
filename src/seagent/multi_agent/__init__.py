@@ -25,7 +25,7 @@ Public API:
 """
 from .router import IntentRouter, SubIntent
 from .specialist import SpecialistAgent
-from .handoff import HandoffProtocol
+from .handoff import HandoffProtocol, HandoffRequest, make_handoff_tool_schemas
 from .orchestrator import MultiAgentOrchestrator
 
 __all__ = [
@@ -33,5 +33,7 @@ __all__ = [
     "SubIntent",
     "SpecialistAgent",
     "HandoffProtocol",
+    "HandoffRequest",
+    "make_handoff_tool_schemas",
     "MultiAgentOrchestrator",
 ]

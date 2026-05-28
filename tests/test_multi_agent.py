@@ -23,10 +23,12 @@ from seagent.llm.mock import MockBackend
 from seagent.memory.semantic import SemanticMemory
 from seagent.multi_agent import (
     HandoffProtocol,
+    HandoffRequest,
     IntentRouter,
     MultiAgentOrchestrator,
     SpecialistAgent,
     SubIntent,
+    make_handoff_tool_schemas,
 )
 from seagent.multi_agent.router import _extract_json_obj
 
@@ -916,3 +918,310 @@ def test_orchestrator_per_sub_aggregated_stats_counters():
     assert s["n_agg_rewrite"] == 1
     assert s["n_agg_block"] == 0
     assert s["n_agg_escalate"] == 0
+
+
+# =============================================================================
+# v3.2: OpenAI Agents SDK 2026 mid-flight handoff tests
+# =============================================================================
+
+
+def test_handoff_request_to_tool_call_format_matches_openai_sdk_shape():
+    """HandoffRequest.to_tool_call_format() must produce the canonical
+    OpenAI Agents SDK 2026 function-tool-call shape."""
+    req = HandoffRequest(
+        from_domain="billing",
+        target_domain="account",
+        context_summary="user is asking about account balance, not invoice",
+        reason="topic_mismatch",
+        confidence=0.42,
+        urgency="normal",
+    )
+    fmt = req.to_tool_call_format()
+    assert fmt["type"] == "function"
+    assert fmt["function"]["name"] == "handoff_to_account"
+    args = fmt["function"]["arguments"]
+    assert args["context_summary"] == "user is asking about account balance, not invoice"
+    assert args["reason"] == "topic_mismatch"
+
+
+def test_handoff_request_to_dict_round_trip():
+    req = HandoffRequest(
+        from_domain="technical", target_domain="human",
+        context_summary="API outage", reason="low_confidence",
+        confidence=0.1, urgency="urgent",
+    )
+    d = req.to_dict()
+    assert d["from_domain"] == "technical"
+    assert d["target_domain"] == "human"
+    assert d["urgency"] == "urgent"
+    assert d["confidence"] == 0.1
+
+
+def test_handoff_request_normalises_invalid_urgency():
+    req = HandoffRequest(
+        from_domain="billing", target_domain="account",
+        context_summary="", reason="x", urgency="extremely-urgent",
+    )
+    assert req.urgency == "normal"
+
+
+def test_make_handoff_tool_schemas_produces_openai_function_tools():
+    schemas = make_handoff_tool_schemas(["billing", "account", "technical"])
+    assert len(schemas) == 3
+    names = [s["function"]["name"] for s in schemas]
+    assert names == [
+        "handoff_to_billing", "handoff_to_account", "handoff_to_technical",
+    ]
+    for s in schemas:
+        assert s["type"] == "function"
+        params = s["function"]["parameters"]
+        assert "context_summary" in params["properties"]
+        assert "reason" in params["properties"]
+        assert set(params["required"]) == {"context_summary", "reason"}
+
+
+# ---------------- specialist heuristic _decide_handoff ----------------------
+
+
+class _ConfBackend(MockBackend):
+    """MockBackend with a forced confidence override on generate_answer
+    output — used to make the specialist's confidence deterministic."""
+
+    def __init__(self, forced_answer=""):
+        super().__init__()
+        self.forced_answer = forced_answer
+
+    def generate_answer(self, query, contexts):
+        # mock returns the top-scored passage text by default; if we force
+        # an empty answer the SupportAgent's heuristic confidence drops.
+        if self.forced_answer is not None:
+            return self.forced_answer
+        return super().generate_answer(query, contexts)
+
+
+def test_specialist_low_confidence_emits_handoff_to_human():
+    """When the specialist's own confidence falls below the threshold it
+    must emit a HandoffRequest pointing at 'human'."""
+    kb = _mini_kb()
+    cfg = Config()
+    backend = _ConfBackend(forced_answer="")   # empty answer -> low conf
+    sem = SemanticMemory(kb, cfg.score_norm_k)
+    base = SupportAgent(cfg, backend, sem)
+    spec = SpecialistAgent.for_domain(
+        "billing", base, handoff_confidence_threshold=0.99,
+    )
+    res = spec.handle("我想申请退款")
+    req = getattr(res, "handoff_request", None)
+    assert req is not None, "specialist should have emitted a handoff request"
+    assert req.target_domain == "human"
+    assert req.reason == "low_confidence"
+    assert req.from_domain == "billing"
+
+
+def test_specialist_topic_mismatch_emits_handoff_to_sibling():
+    """billing specialist asked about an account-topic query (KB top hit is
+    an account doc) emits handoff_to_account."""
+    kb = _mini_kb()
+    base = _agent_with(kb)
+    # disable the topic filter (no kb_topics) so we *retrieve* the account
+    # doc — but keep self.domain_topics=billing-set so the mismatch fires.
+    spec = SpecialistAgent(
+        domain="billing",
+        base_agent=base,
+        kb_filter=None,           # don't filter; we want the off-topic hit
+        domain_topics=["billing", "subscription"],
+        handoff_confidence_threshold=0.0,  # disable low-conf branch
+    )
+    # query whose top KB hit is account-topic (kb_a1, password reset)
+    res = spec.handle("我忘记密码了，请帮我重置密码")
+    req = getattr(res, "handoff_request", None)
+    assert req is not None, "specialist should have detected topic mismatch"
+    assert req.target_domain == "account", f"got {req.target_domain}"
+    assert req.reason == "topic_mismatch"
+    assert req.from_domain == "billing"
+
+
+def test_specialist_in_domain_query_does_not_emit_handoff():
+    """When the top KB hit is in-domain, no handoff is emitted."""
+    kb = _mini_kb()
+    base = _agent_with(kb)
+    spec = SpecialistAgent.for_domain(
+        "billing", base, handoff_confidence_threshold=0.0,
+    )
+    res = spec.handle("我想申请退款")
+    assert getattr(res, "handoff_request", None) is None
+
+
+def test_general_specialist_never_emits_handoff():
+    """The catch-all 'general' specialist must never emit handoffs (would
+    loop)."""
+    kb = _mini_kb()
+    base = _agent_with(kb)
+    backend = _ConfBackend(forced_answer="")
+    sem = SemanticMemory(kb, Config().score_norm_k)
+    base = SupportAgent(Config(), backend, sem)
+    spec = SpecialistAgent.for_domain(
+        "general", base, handoff_confidence_threshold=0.99,
+    )
+    res = spec.handle("anything at all")
+    assert getattr(res, "handoff_request", None) is None
+
+
+# ---------------- orchestrator mid-flight dispatch --------------------------
+
+
+def _build_handoff_orchestrator(router_payload, *, enable=True, max_hops=1):
+    kb = _mini_kb()
+    base = _agent_with(kb)
+    specs = {
+        "billing":   SpecialistAgent.for_domain("billing",   base),
+        "account":   SpecialistAgent.for_domain("account",   base),
+        "technical": SpecialistAgent.for_domain("technical", base),
+        "general":   SpecialistAgent.for_domain("general",   base),
+    }
+    orch = MultiAgentOrchestrator(
+        IntentRouter(backend=_StubBackend(router_payload)), specs,
+        default_specialist="general",
+        guardrail_mode="none",
+        enable_mid_flight_handoff=enable,
+        max_handoff_hops=max_hops,
+    )
+    return orch, specs
+
+
+def test_orchestrator_dispatches_mid_flight_handoff_single_intent():
+    """Single-intent path: billing specialist hands off to account, the
+    final result reflects the account dispatch."""
+    payload = '{"intents":[{"label":"billing","sub_query":"我忘记密码了","confidence":0.9}]}'
+    orch, specs = _build_handoff_orchestrator(payload, enable=True)
+    res = orch.handle("我忘记密码了")
+    # handoff_trace must include a handoff_to_account event
+    trace = getattr(res, "handoff_trace", [])
+    assert len(trace) >= 1
+    names = [e["function"]["name"] for e in trace]
+    assert "handoff_to_account" in names
+    # the dispatched event is marked True
+    dispatched = [e for e in trace if e.get("dispatched")]
+    assert len(dispatched) >= 1
+    s = orch.stats()
+    assert s["n_handoff_emitted"] >= 1
+    assert s["n_handoff_dispatched"] >= 1
+
+
+def test_orchestrator_default_disables_mid_flight_handoff():
+    """enable_mid_flight_handoff defaults to False — old call sites get
+    byte-identical behaviour (no handoff_trace, no dispatch)."""
+    payload = '{"intents":[{"label":"billing","sub_query":"我忘记密码了","confidence":0.9}]}'
+    # use the existing _build_orchestrator helper (doesn't pass the new flag)
+    orch, _ = _build_orchestrator(router_payload=payload)
+    res = orch.handle("我忘记密码了")
+    assert getattr(res, "handoff_trace", None) is None
+    s = orch.stats()
+    assert s["n_handoff_dispatched"] == 0
+
+
+def test_orchestrator_handoff_to_human_forces_escalation():
+    """A HandoffRequest with target_domain='human' forces escalate=True on
+    the result and does NOT re-dispatch."""
+    # Use a KB that ONLY contains billing-topic docs so the topic-mismatch
+    # branch in _decide_handoff cannot fire — the low-confidence branch
+    # (target='human') must therefore win.
+    kb_billing_only = [
+        KBDoc("kb_b1", "退款政策", "billing",
+              "您可以在订单完成后 14 天内申请退款。"),
+        KBDoc("kb_b2", "套餐降级", "subscription",
+              "降级在当前计费周期结束后生效。"),
+    ]
+    cfg = Config()
+    backend = _ConfBackend(forced_answer="")  # low confidence -> human
+    sem = SemanticMemory(kb_billing_only, cfg.score_norm_k)
+    base = SupportAgent(cfg, backend, sem)
+    specs = {
+        "billing":   SpecialistAgent.for_domain(
+            "billing", base, handoff_confidence_threshold=0.99
+        ),
+        "general":   SpecialistAgent.for_domain("general", base),
+    }
+    payload = '{"intents":[{"label":"billing","sub_query":"x","confidence":0.9}]}'
+    orch = MultiAgentOrchestrator(
+        IntentRouter(backend=_StubBackend(payload)), specs,
+        default_specialist="general",
+        guardrail_mode="none",
+        enable_mid_flight_handoff=True,
+    )
+    res = orch.handle("x")
+    assert res.escalate is True
+    trace = getattr(res, "handoff_trace", [])
+    assert any(e["function"]["name"] == "handoff_to_human" for e in trace)
+    s = orch.stats()
+    assert s["n_handoff_to_human"] == 1
+    assert s["n_handoff_dispatched"] == 0  # no re-dispatch for 'human'
+
+
+def test_orchestrator_max_handoff_hops_caps_chain():
+    """max_handoff_hops=0 means even a valid sibling handoff is blocked."""
+    payload = '{"intents":[{"label":"billing","sub_query":"我忘记密码了","confidence":0.9}]}'
+    orch, _ = _build_handoff_orchestrator(payload, enable=True, max_hops=0)
+    res = orch.handle("我忘记密码了")
+    s = orch.stats()
+    # the request was emitted but never dispatched
+    assert s["n_handoff_emitted"] >= 1
+    assert s["n_handoff_dispatched"] == 0
+    assert s["n_handoff_loops_blocked"] >= 1
+    # trace records the attempt with dispatched=False
+    trace = getattr(res, "handoff_trace", [])
+    assert any(e.get("dispatched") is False for e in trace)
+
+
+def test_orchestrator_multi_intent_handoff_per_sub_path():
+    """Multi-intent fan-out: a billing sub-intent that's really an account
+    question must trigger a handoff dispatch independently of the other
+    sub-intents."""
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"我忘记密码了","confidence":0.9},'
+        '{"label":"technical","sub_query":"Webhook 超时怎么排查","confidence":0.7}'
+        "]}"
+    )
+    orch, _ = _build_handoff_orchestrator(payload, enable=True)
+    res = orch.handle("我忘记密码了，并且 Webhook 老超时")
+    s = orch.stats()
+    assert s["n_handoff_emitted"] >= 1
+    assert s["n_handoff_dispatched"] >= 1
+    # merged answer still includes both sub-intents
+    assert "针对您的第 1 个问题" in res.answer
+    assert "针对您的第 2 个问题" in res.answer
+
+
+def test_orchestrator_disabled_flag_byte_compatible_with_v28():
+    """With enable_mid_flight_handoff=False (default), even if specialists
+    *would* emit a handoff (low conf), no trace and no dispatch happens —
+    the result is byte-equivalent to the v2.8 path."""
+    kb = _mini_kb()
+    cfg = Config()
+    # use a backend that would trigger low-conf handoffs IF the flag were on
+    backend = _ConfBackend(forced_answer="")
+    sem = SemanticMemory(kb, cfg.score_norm_k)
+    base = SupportAgent(cfg, backend, sem)
+    specs = {
+        "billing":   SpecialistAgent.for_domain(
+            "billing", base, handoff_confidence_threshold=0.99
+        ),
+        "general":   SpecialistAgent.for_domain("general", base),
+    }
+    payload = '{"intents":[{"label":"billing","sub_query":"x","confidence":0.9}]}'
+    orch = MultiAgentOrchestrator(
+        IntentRouter(backend=_StubBackend(payload)), specs,
+        default_specialist="general",
+        guardrail_mode="none",
+        # NOTE: enable_mid_flight_handoff omitted -> default False
+    )
+    res = orch.handle("x")
+    assert getattr(res, "handoff_trace", None) is None
+    assert orch.stats()["n_handoff_dispatched"] == 0
+    # the specialist may still have attached a handoff_request to its own
+    # result (that's by design — it's metadata) but the orchestrator must
+    # not act on it.  The escalation flag was NOT forced by the orchestrator.
+    # (It may still be True from the underlying SupportAgent pipeline; we
+    # only assert no orchestrator-level human handoff was counted.)
+    assert orch.stats()["n_handoff_to_human"] == 0

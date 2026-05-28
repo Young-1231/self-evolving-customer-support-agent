@@ -27,10 +27,11 @@ from __future__ import annotations
 
 import threading
 from dataclasses import replace
-from typing import Any, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ..agent.support_agent import AgentResult, SupportAgent
 from ..llm.base import Passage
+from .handoff import HandoffRequest
 
 
 # Default KB-topic membership for each specialist domain.  These align with the
@@ -76,6 +77,8 @@ class SpecialistAgent:
         kb_filter: Optional[Callable[[Passage], bool]] = None,
         fallback_on_empty: bool = True,
         mode: str = "core",
+        handoff_confidence_threshold: float = 0.3,
+        domain_topics: Optional[Sequence[str]] = None,
     ) -> None:
         if mode not in ("core", "observed"):
             raise ValueError(f"mode must be 'core' or 'observed', got {mode!r}")
@@ -84,6 +87,18 @@ class SpecialistAgent:
         self.kb_filter = kb_filter
         self.fallback_on_empty = fallback_on_empty
         self.mode = mode
+        # v3.2 mid-flight handoff heuristic config.  ``domain_topics`` is the
+        # set of KB topics this specialist owns — used by ``_decide_handoff``
+        # to detect a topic mismatch.  When unset we fall back to
+        # DEFAULT_DOMAIN_TOPICS[domain].
+        self.handoff_confidence_threshold = float(handoff_confidence_threshold)
+        if domain_topics is None:
+            self.domain_topics = set(DEFAULT_DOMAIN_TOPICS.get(domain, set()))
+        else:
+            self.domain_topics = set(domain_topics)
+        # Lazy doc_id -> topic map for KB hits (populated on demand).  Sharing
+        # the lookup across calls avoids walking semantic.docs every handle().
+        self._doc_topic_map: Optional[Dict[str, str]] = None
         # Serialize observed-mode delegation when sharing a single base agent
         # across threads — base agent's tracer turn counter and our
         # ``_retrieve`` monkey-patch are not thread-safe.  The lock is per
@@ -109,6 +124,7 @@ class SpecialistAgent:
         base_agent: SupportAgent,
         kb_topics: Optional[Sequence[str]] = None,
         mode: str = "core",
+        handoff_confidence_threshold: float = 0.3,
     ) -> "SpecialistAgent":
         """Build a specialist using DEFAULT_DOMAIN_TOPICS (or override)."""
         topics = set(kb_topics) if kb_topics is not None else set(DEFAULT_DOMAIN_TOPICS.get(domain, set()))
@@ -128,7 +144,14 @@ class SpecialistAgent:
                 return _map.get(p.ref, "general") in _topics
 
             kb_filter = _filter
-        return cls(domain=domain, base_agent=base_agent, kb_filter=kb_filter, mode=mode)
+        return cls(
+            domain=domain,
+            base_agent=base_agent,
+            kb_filter=kb_filter,
+            mode=mode,
+            handoff_confidence_threshold=handoff_confidence_threshold,
+            domain_topics=topics,
+        )
 
     # ---- main entrypoint ----
     def handle(self, query: str) -> AgentResult:
@@ -140,7 +163,118 @@ class SpecialistAgent:
             setattr(result, "specialist_domain", self.domain)
         except Exception:
             pass
+        # v3.2: emit a mid-flight HandoffRequest when our confidence is low
+        # or the user's question doesn't actually match our KB topic.  The
+        # orchestrator picks it up via getattr(result, 'handoff_request', None)
+        # — old call sites that don't look for it see byte-identical output.
+        handoff_req = self._decide_handoff(query, result)
+        if handoff_req is not None:
+            try:
+                setattr(result, "handoff_request", handoff_req)
+            except Exception:
+                pass
         return result
+
+    # ---- v3.2 mid-flight handoff decision -------------------------------
+    def _decide_handoff(
+        self, query: str, result: AgentResult
+    ) -> Optional[HandoffRequest]:
+        """Heuristic: should this specialist hand off mid-flight?
+
+        Triggers (in order of priority):
+
+        1. **Topic mismatch** — top retrieved KB hit belongs to a topic that
+           is NOT in ``self.domain_topics`` *and* maps cleanly to a sibling
+           specialist domain.  This is the "router mis-classified, I see
+           you actually want X" case.
+        2. **Low confidence** — ``result.confidence`` is strictly below
+           ``self.handoff_confidence_threshold``.  Fallback target: ``human``.
+
+        The ``general`` specialist never emits handoffs (it is the catch-all
+        terminal node — handing off from general would loop).
+        """
+        if self.domain == "general":
+            return None
+
+        # ---------- 1) KB topic mismatch ----------
+        target = self._infer_target_domain_from_contexts(result)
+        if target is not None and target != self.domain:
+            return HandoffRequest(
+                from_domain=self.domain,
+                target_domain=target,
+                context_summary=self._summarise_for_handoff(query, result),
+                reason="topic_mismatch",
+                confidence=float(result.confidence),
+                urgency="normal",
+            )
+
+        # ---------- 2) low confidence ----------
+        if float(result.confidence) < self.handoff_confidence_threshold:
+            return HandoffRequest(
+                from_domain=self.domain,
+                target_domain="human",
+                context_summary=self._summarise_for_handoff(query, result),
+                reason="low_confidence",
+                confidence=float(result.confidence),
+                urgency="normal",
+            )
+        return None
+
+    def _infer_target_domain_from_contexts(
+        self, result: AgentResult
+    ) -> Optional[str]:
+        """Look at the top KB hit's topic and find which sibling specialist
+        domain (per DEFAULT_DOMAIN_TOPICS) would own it.  Returns ``None``
+        when we can't tell or when the hit is already in-domain."""
+        if not self.domain_topics:
+            # general / no-filter specialist — never claim mismatch
+            return None
+        doc_topic_map = self._get_doc_topic_map()
+        if not doc_topic_map:
+            return None
+        for p in result.contexts or []:
+            if p.source != "kb":
+                continue
+            topic = doc_topic_map.get(p.ref)
+            if not topic:
+                continue
+            if topic in self.domain_topics:
+                # the very first in-domain KB hit means we're good — no
+                # handoff. Bail out early.
+                return None
+            # find a sibling specialist that owns this topic.  We prefer the
+            # canonical mapping in DEFAULT_DOMAIN_TOPICS (skipping ourself
+            # and 'general' which is the no-filter catch-all).
+            for cand_domain, cand_topics in DEFAULT_DOMAIN_TOPICS.items():
+                if cand_domain in (self.domain, "general"):
+                    continue
+                if topic in cand_topics:
+                    return cand_domain
+            return None
+        return None
+
+    def _get_doc_topic_map(self) -> Dict[str, str]:
+        if self._doc_topic_map is not None:
+            return self._doc_topic_map
+        sem = getattr(self.base, "semantic", None)
+        docs = getattr(sem, "docs", []) if sem is not None else []
+        self._doc_topic_map = {
+            d.doc_id: getattr(d, "topic", "general") for d in docs
+        }
+        return self._doc_topic_map
+
+    def _summarise_for_handoff(
+        self, query: str, result: AgentResult, max_len: int = 200
+    ) -> str:
+        """Cheap deterministic summary for the next specialist — no LLM
+        call.  Future work: have the LLM author this via the tool-call."""
+        q = (query or "").strip().replace("\n", " ")
+        if len(q) > max_len:
+            q = q[:max_len] + "…"
+        return (
+            f"[from {self.domain}] user_query: {q} "
+            f"(my_confidence={float(result.confidence):.2f})"
+        )
 
     # ---- mode='core': replay SupportAgent._handle_core w/ filtered ctxs ---
     def _handle_core(self, query: str) -> AgentResult:
