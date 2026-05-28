@@ -1,0 +1,39 @@
+{
+  "topics": [
+    "billing",
+    "account_security",
+    "data_export",
+    "integrations_api",
+    "mobile_app",
+    "permissions",
+    "troubleshooting",
+    "general",
+    "cancel_order",
+    "track_order",
+    "refund",
+    "shipping",
+    "create_account",
+    "delete_account",
+    "invoice"
+  ],
+  "n_cases": 10000,
+  "n_eval": 200,
+  "seed": 0,
+  "topic_recipe_keys": [
+    "billing",
+    "account_security",
+    "data_export",
+    "integrations_api",
+    "mobile_app",
+    "permissions",
+    "troubleshooting",
+    "general",
+    "cancel_order",
+    "track_order",
+    "refund",
+    "shipping",
+    "create_account",
+    "delete_account",
+    "invoice"
+  ]
+}
