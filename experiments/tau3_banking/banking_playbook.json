@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "meta": {
+    "domain": "banking_knowledge",
+    "n_failed_cases": 12,
+    "train_pass1": 0.25,
+    "model": "deepseek/deepseek-chat",
+    "version": 1,
+    "tau_version": "tau3-v1.0",
+    "split_method": "manual_task_ids",
+    "train_ids": [
+      "task_001",
+      "task_002",
+      "task_003",
+      "task_004",
+      "task_005",
+      "task_006",
+      "task_007",
+      "task_008",
+      "task_010",
+      "task_012",
+      "task_014",
+      "task_015",
+      "task_016",
+      "task_017",
+      "task_018",
+      "task_019",
+      "task_020",
+      "task_021",
+      "task_022",
+      "task_023"
+    ]
+  },
+  "tips": [
+    "Always complete identity verification by confirming at least two matching data points before accessing any account details or performing account actions.",
+    "After verification, explicitly confirm the customer's specific request and intent before proceeding with any application, referral, or transaction.",
+    "When a customer requests a promotional offer or specific card feature, search for the exact offer name and terms before applying or escalating.",
+    "If a knowledge base search returns no relevant results after multiple attempts, immediately transfer the customer to a human agent.",
+    "Do not proceed with credit card applications or referrals until the customer has explicitly confirmed their choice and provided all required information.",
+    "When a customer provides mismatched verification details, request alternative verification methods or transfer to a human agent rather than proceeding with partial verification.",
+    "After logging verification, always follow the complete sequence of required actions for the task without skipping any steps.",
+    "For referral or bonus inquiries, retrieve the customer's referral records before taking any further action to determine the correct next step."
+  ]
+}
