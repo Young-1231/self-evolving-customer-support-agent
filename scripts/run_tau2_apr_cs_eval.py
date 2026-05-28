@@ -37,9 +37,18 @@ def main():
     ap.add_argument("--max-steps", type=int, default=80)
     ap.add_argument("--workdir", default=os.path.join(os.path.dirname(__file__), "..", "experiments", "tau2_airline"))
     ap.add_argument("--mode", default="top_k_relevance",
-                    choices=["top_k_relevance", "cf_weighted", "conf_gated", "all"])
+                    choices=["top_k_relevance", "cf_weighted", "conf_gated",
+                             "adaptive_k", "all"])
     ap.add_argument("--top-k", type=int, default=4)
     ap.add_argument("--seed", type=int, default=42)
+    # adaptive_k extras (env-driven so memory_agent picks them up without
+    # touching the script's stable API).
+    ap.add_argument("--adaptive-k-min", type=int, default=1)
+    ap.add_argument("--adaptive-k-max", type=int, default=8)
+    ap.add_argument("--adaptive-cum-threshold", type=float, default=0.5)
+    ap.add_argument("--adaptive-confidence", type=float, default=None,
+                    help="static per-call confidence to feed the router; "
+                         "leave unset to use the 'no signal -> moderate' branch")
     args = ap.parse_args()
 
     model = os.environ.get("TAU2_MODEL", "deepseek/deepseek-chat")
@@ -55,6 +64,12 @@ def main():
     os.environ[PLAYBOOK_ENV] = playbook
     os.environ["SEAGENT_TAU2_ROUTE_MODE"] = args.mode
     os.environ["SEAGENT_TAU2_TOP_K"] = str(args.top_k)
+    if args.mode == "adaptive_k":
+        os.environ["SEAGENT_TAU2_ADAPTIVE_K_MIN"] = str(args.adaptive_k_min)
+        os.environ["SEAGENT_TAU2_ADAPTIVE_K_MAX"] = str(args.adaptive_k_max)
+        os.environ["SEAGENT_TAU2_ADAPTIVE_CUM"] = str(args.adaptive_cum_threshold)
+        if args.adaptive_confidence is not None:
+            os.environ["SEAGENT_TAU2_CONFIDENCE"] = str(args.adaptive_confidence)
 
     n_test = args.test_tasks if args.test_tasks > 0 else None
     print(f"[apr-cs] {args.domain}  mode={args.mode}  top_k={args.top_k}  "

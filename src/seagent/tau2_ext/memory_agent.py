@@ -46,6 +46,10 @@ from .experience import PLAYBOOK_ENV, load_playbook, load_playbook_with_scores
 ROUTE_MODE_ENV = "SEAGENT_TAU2_ROUTE_MODE"
 ROUTE_TOPK_ENV = "SEAGENT_TAU2_TOP_K"
 ROUTE_CONF_ENV = "SEAGENT_TAU2_CONFIDENCE"
+# adaptive_k extras
+ROUTE_KMIN_ENV = "SEAGENT_TAU2_ADAPTIVE_K_MIN"
+ROUTE_KMAX_ENV = "SEAGENT_TAU2_ADAPTIVE_K_MAX"
+ROUTE_CUM_ENV = "SEAGENT_TAU2_ADAPTIVE_CUM"
 
 EXPERIENCE_BLOCK = (
     "<learned_experience>\n"
@@ -79,6 +83,51 @@ def _resolve_top_k() -> int:
         return 4
 
 
+def _resolve_float(env: str, default: Optional[float]) -> Optional[float]:
+    raw = os.environ.get(env, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _resolve_int(env: str, default: int) -> int:
+    raw = os.environ.get(env, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _build_router_config() -> RouterConfig:
+    """Resolve RouterConfig from the SEAGENT_TAU2_* env-var surface.
+
+    All fields default to RouterConfig's class defaults; only the env vars
+    that the runner actually sets get overridden. This keeps prior runs
+    (top_k_relevance, cf_weighted) bit-exact.
+    """
+    base = RouterConfig()
+    k = _resolve_top_k()
+    k_min = _resolve_int(ROUTE_KMIN_ENV, base.k_min)
+    k_max = _resolve_int(ROUTE_KMAX_ENV, base.k_max)
+    cum = _resolve_float(ROUTE_CUM_ENV, base.cum_threshold)
+    return RouterConfig(
+        k=k,
+        low_tau=base.low_tau,
+        high_tau=base.high_tau,
+        cf_floor=base.cf_floor,
+        k_min=k_min,
+        k_max=k_max,
+        cum_threshold=cum,
+        complexity_bonus=base.complexity_bonus,
+        complexity_token_threshold=base.complexity_token_threshold,
+    )
+
+
 def _resolve_confidence() -> Optional[float]:
     raw = os.environ.get(ROUTE_CONF_ENV, "").strip()
     if not raw:
@@ -104,7 +153,7 @@ class MemoryAugmentedLLMAgent(LLMAgent):
             self._tips = _tips_with
         self._route_mode = _resolve_mode()
         self._router: Optional[PlaybookRouter] = (
-            PlaybookRouter(RouterConfig(k=_resolve_top_k()))
+            PlaybookRouter(_build_router_config())
             if self._route_mode != MODE_ALL
             else None
         )

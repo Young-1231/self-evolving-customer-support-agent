@@ -1,0 +1,38 @@
+{
+  "domain": "airline",
+  "model": "deepseek/deepseek-chat",
+  "route_mode": "adaptive_k",
+  "top_k": 4,
+  "test_tasks": 20,
+  "num_trials": 4,
+  "memory_off_baseline": {
+    "avg_reward": 0.8,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.8,
+    "pass^2": 0.7166666666666667,
+    "pass^3": 0.675,
+    "pass^4": 0.65
+  },
+  "memory_on_naive_all_tips": {
+    "avg_reward": 0.775,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.775,
+    "pass^2": 0.725,
+    "pass^3": 0.6875,
+    "pass^4": 0.65
+  },
+  "memory_on_apr_cs": {
+    "avg_reward": 0.7875,
+    "avg_agent_cost": 0.0,
+    "total_tasks": 20,
+    "total_sims": 80,
+    "pass^1": 0.7875,
+    "pass^2": 0.675,
+    "pass^3": 0.6,
+    "pass^4": 0.55
+  }
+}
