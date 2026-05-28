@@ -384,3 +384,246 @@ def test_handoff_protocol_to_dict_and_human_factory():
     h2 = HandoffProtocol.to_human("low_confidence", context_summary="...", urgent=True)
     assert h2.target_domain == "human"
     assert h2.urgent is True
+
+
+# =============================================================================
+# v2.7: guardrail_mode tests (merged-answer guardrail)
+# =============================================================================
+
+
+class _StubGuardrail:
+    """Test double for GuardrailPipeline that records calls + returns a
+    canned check_output verdict."""
+
+    def __init__(self, output_action="ALLOW", output_blocked=False,
+                 input_blocked=False, redacted_input=None,
+                 redacted_output=None):
+        from seagent.guardrails.pipeline import GuardrailReport
+        self._Report = GuardrailReport
+        self.output_action = output_action
+        self.output_blocked = output_blocked
+        self.input_blocked = input_blocked
+        self.redacted_input = redacted_input
+        self.redacted_output = redacted_output
+        self.input_calls = []
+        self.output_calls = []
+
+    def check_input(self, user_text):
+        self.input_calls.append(user_text)
+        action = "BLOCK" if self.input_blocked else "ALLOW"
+        return self._Report(
+            stage="input", passed=not self.input_blocked,
+            action=action, blocked=self.input_blocked,
+            redacted_text=self.redacted_input if self.redacted_input is not None else user_text,
+        )
+
+    def check_output(self, answer, contexts):
+        self.output_calls.append((answer, list(contexts)))
+        return self._Report(
+            stage="output", passed=(self.output_action == "ALLOW"),
+            action=self.output_action,
+            blocked=self.output_blocked,
+            redacted_answer=self.redacted_output if self.redacted_output is not None else answer,
+        )
+
+
+def _build_orchestrator_v27(router_payload, *, guardrail_mode="merged",
+                            guardrail=None, specialist_mode="core"):
+    kb = _mini_kb()
+    base = _agent_with(kb)
+    specs = {
+        "billing":   SpecialistAgent.for_domain("billing",   base, mode=specialist_mode),
+        "account":   SpecialistAgent.for_domain("account",   base, mode=specialist_mode),
+        "technical": SpecialistAgent.for_domain("technical", base, mode=specialist_mode),
+        "general":   SpecialistAgent.for_domain("general",   base, mode=specialist_mode),
+    }
+    router = IntentRouter(backend=_StubBackend(router_payload))
+    orch = MultiAgentOrchestrator(
+        router, specs,
+        default_specialist="general",
+        guardrail=guardrail,
+        guardrail_mode=guardrail_mode,
+    )
+    return orch, specs
+
+
+def test_orchestrator_guardrail_mode_default_is_merged():
+    """v2.7: new default guardrail_mode is 'merged'."""
+    payload = '{"intents":[{"label":"billing","sub_query":"x","confidence":0.9}]}'
+    orch, _ = _build_orchestrator(router_payload=payload)
+    assert orch.guardrail_mode == "merged"
+
+
+def test_orchestrator_guardrail_mode_rejects_invalid():
+    kb = _mini_kb(); base = _agent_with(kb)
+    specs = {"general": SpecialistAgent.for_domain("general", base)}
+    with pytest.raises(ValueError):
+        MultiAgentOrchestrator(IntentRouter(backend=None), specs,
+                               default_specialist="general",
+                               guardrail_mode="bogus")
+
+
+def test_orchestrator_merged_mode_downgrades_observed_specialists():
+    """v2.7: specialists built in mode='observed' must be downgraded to
+    'core' when guardrail_mode='merged', so the merged guardrail isn't
+    double-fired."""
+    guard = _StubGuardrail()
+    with pytest.warns(RuntimeWarning, match="downgraded specialists"):
+        orch, specs = _build_orchestrator_v27(
+            '{"intents":[{"label":"billing","sub_query":"x","confidence":0.9}]}',
+            guardrail_mode="merged",
+            guardrail=guard,
+            specialist_mode="observed",
+        )
+    for label, spec in specs.items():
+        assert spec.mode == "core", f"{label} not downgraded"
+
+
+def test_orchestrator_merged_mode_runs_single_output_guardrail():
+    """v2.7: for multi_intent, guardrail.check_output is called EXACTLY ONCE
+    on the merged answer (not N times)."""
+    guard = _StubGuardrail(output_action="ALLOW")
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"我想退款","confidence":0.9},'
+        '{"label":"account","sub_query":"如何重置密码","confidence":0.8},'
+        '{"label":"technical","sub_query":"Webhook 超时","confidence":0.7}'
+        "]}"
+    )
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="merged")
+    res = orch.handle("我想退款，重置密码，Webhook 老超时")
+    # exactly one output guardrail call (on merged answer), one input call
+    assert len(guard.output_calls) == 1
+    assert len(guard.input_calls) == 1
+    # merged answer must contain all 3 sub-prefixes
+    merged_answer = guard.output_calls[0][0]
+    assert "针对您的第 1 个问题" in merged_answer
+    assert "针对您的第 2 个问题" in merged_answer
+    assert "针对您的第 3 个问题" in merged_answer
+    # result.guardrail is the merged-stage report
+    assert res.guardrail is not None
+    assert getattr(res, "merged_guardrail_action", None) == "ALLOW"
+
+
+def test_orchestrator_merged_mode_single_intent_skips_merged_guardrail():
+    """v2.7: single-intent path stays on the legacy fast path — orchestrator
+    must NOT run its merged guardrail (the specialist's own pipeline does)."""
+    guard = _StubGuardrail()
+    payload = '{"intents":[{"label":"billing","sub_query":"我想退款","confidence":0.9}]}'
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="merged")
+    res = orch.handle("我想退款")
+    # NO orchestrator-level guardrail calls — single intent fast path
+    assert guard.output_calls == []
+    assert guard.input_calls == []
+    assert isinstance(res, AgentResult)
+
+
+def test_orchestrator_merged_mode_escalates_when_guardrail_says_escalate():
+    """v2.7: merged-stage ESCALATE verdict must propagate to AgentResult."""
+    guard = _StubGuardrail(output_action="ESCALATE")
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"我想退款","confidence":0.9},'
+        '{"label":"account","sub_query":"如何重置密码","confidence":0.8}'
+        "]}"
+    )
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="merged")
+    res = orch.handle("退款 + 改密码")
+    assert res.escalate is True
+    assert getattr(res, "merged_guardrail_action", None) == "ESCALATE"
+    s = orch.stats()
+    assert s["n_merged_guard_escalate"] == 1
+    assert s["n_merged_guard_block"] == 0
+
+
+def test_orchestrator_merged_mode_blocks_when_guardrail_says_block():
+    """v2.7: merged-stage BLOCK verdict triggers escalate=True and is
+    counted under n_merged_guard_block."""
+    guard = _StubGuardrail(output_action="BLOCK", output_blocked=True,
+                           redacted_output="[BLOCKED]")
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"q1","confidence":0.9},'
+        '{"label":"account","sub_query":"q2","confidence":0.8}'
+        "]}"
+    )
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="merged")
+    res = orch.handle("two-q")
+    assert res.escalate is True
+    assert res.answer == "[BLOCKED]"  # redacted_answer propagated
+    assert getattr(res, "merged_guardrail_action", None) == "BLOCK"
+    assert orch.stats()["n_merged_guard_block"] == 1
+
+
+def test_orchestrator_merged_mode_input_block_short_circuits():
+    """v2.7: merged-mode input-stage BLOCK returns canned escalation response
+    without ever calling specialists."""
+    guard = _StubGuardrail(input_blocked=True)
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"q1","confidence":0.9},'
+        '{"label":"account","sub_query":"q2","confidence":0.8}'
+        "]}"
+    )
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="merged")
+    res = orch.handle("malicious payload")
+    assert res.escalate is True
+    assert res.confidence == 0.0
+    # specialists never reached -> no output guardrail call
+    assert guard.output_calls == []
+    assert "人工客服" in res.answer
+
+
+def test_orchestrator_per_sub_mode_preserves_legacy_behaviour():
+    """v2.7: guardrail_mode='per_sub' must NOT downgrade observed specialists
+    and must NOT call orchestrator's own merged guardrail."""
+    guard = _StubGuardrail()
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"q1","confidence":0.9},'
+        '{"label":"account","sub_query":"q2","confidence":0.8}'
+        "]}"
+    )
+    # specialists built in mode='observed' must remain 'observed'
+    orch, specs = _build_orchestrator_v27(
+        payload, guardrail=guard,
+        guardrail_mode="per_sub",
+        specialist_mode="observed",
+    )
+    assert all(s.mode == "observed" for s in specs.values())
+    orch.handle("q1 + q2")
+    # orchestrator must NOT call its own guardrail under 'per_sub'
+    assert guard.output_calls == []
+    assert guard.input_calls == []
+
+
+def test_orchestrator_none_mode_skips_all_orchestrator_guardrails():
+    """v2.7: guardrail_mode='none' means orchestrator never invokes its
+    guardrail (even if one was passed)."""
+    guard = _StubGuardrail()
+    payload = (
+        '{"intents":['
+        '{"label":"billing","sub_query":"q1","confidence":0.9},'
+        '{"label":"account","sub_query":"q2","confidence":0.8}'
+        "]}"
+    )
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="none")
+    orch.handle("q1 + q2")
+    assert guard.output_calls == []
+    assert guard.input_calls == []
+
+
+def test_orchestrator_merged_mode_warns_when_no_guardrail():
+    """v2.7: merged mode + no guardrail emits a RuntimeWarning at init."""
+    kb = _mini_kb(); base = _agent_with(kb)
+    specs = {"general": SpecialistAgent.for_domain("general", base)}
+    with pytest.warns(RuntimeWarning, match="no output guardrail"):
+        MultiAgentOrchestrator(IntentRouter(backend=None), specs,
+                               default_specialist="general",
+                               guardrail=None, guardrail_mode="merged")
