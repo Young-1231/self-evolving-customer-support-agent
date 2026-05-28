@@ -1,0 +1,178 @@
+{
+  "version": "1",
+  "skills": [
+    {
+      "skill_id": "pb_billing_ans",
+      "name": "年付月付退款",
+      "description": "处理与「年付月付退款」相关的常见客服咨询",
+      "topic": "billing",
+      "triggers": [
+        "付月",
+        "月付",
+        "额怎",
+        "怎么",
+        "么处",
+        "付差",
+        "处理",
+        "年付"
+      ],
+      "action": "answer",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_billing_ans.md"
+    },
+    {
+      "skill_id": "pb_billing_esc",
+      "name": "现金退款转人工",
+      "description": "识别「现金退款转人工」并转交对应人工团队",
+      "topic": "billing",
+      "triggers": [
+        "金退",
+        "我要",
+        "款投",
+        "退款",
+        "投诉",
+        "要现",
+        "现金"
+      ],
+      "action": "escalate",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_billing_esc.md"
+    },
+    {
+      "skill_id": "pb_login_ans",
+      "name": "密码与邮箱修改",
+      "description": "处理与「密码与邮箱修改」相关的常见客服咨询",
+      "topic": "login",
+      "triggers": [
+        "链接",
+        "多久",
+        "码重",
+        "接多",
+        "密码",
+        "久有",
+        "重置",
+        "置链"
+      ],
+      "action": "answer",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_login_ans.md"
+    },
+    {
+      "skill_id": "pb_login_esc",
+      "name": "账号被盗转安全团队",
+      "description": "识别「账号被盗转安全团队」并转交对应人工团队",
+      "topic": "login",
+      "triggers": [
+        "么办",
+        "怎么",
+        "被盗",
+        "号被",
+        "账号",
+        "盗了",
+        "了怎"
+      ],
+      "action": "escalate",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_login_esc.md"
+    },
+    {
+      "skill_id": "pb_product_ans",
+      "name": "产品使用 FAQ",
+      "description": "处理与「产品使用 FAQ」相关的常见客服咨询",
+      "topic": "product",
+      "triggers": [
+        "么导",
+        "怎么",
+        "导出",
+        "报表",
+        "出报",
+        "流是",
+        "api",
+        "多少"
+      ],
+      "action": "answer",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_product_ans.md"
+    },
+    {
+      "skill_id": "pb_refund_ans",
+      "name": "无理由退款流程",
+      "description": "处理与「无理由退款流程」相关的常见客服咨询",
+      "topic": "refund",
+      "triggers": [
+        "理由",
+        "天无",
+        "申请",
+        "怎么",
+        "由怎",
+        "么申",
+        "七天",
+        "无理"
+      ],
+      "action": "answer",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_refund_ans.md"
+    },
+    {
+      "skill_id": "pb_refund_esc",
+      "name": "退款仲裁转人工",
+      "description": "识别「退款仲裁转人工」并转交对应人工团队",
+      "topic": "refund",
+      "triggers": [
+        "商家",
+        "家拒",
+        "款怎",
+        "退款",
+        "投诉",
+        "绝退",
+        "么投",
+        "怎么"
+      ],
+      "action": "escalate",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_refund_esc.md"
+    },
+    {
+      "skill_id": "pb_shipping_ans",
+      "name": "发货时效说明",
+      "description": "处理与「发货时效说明」相关的常见客服咨询",
+      "topic": "shipping",
+      "triggers": [
+        "久发",
+        "订单",
+        "多久",
+        "发货",
+        "单多"
+      ],
+      "action": "answer",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_shipping_ans.md"
+    },
+    {
+      "skill_id": "pb_shipping_esc",
+      "name": "物流丢件转人工",
+      "description": "识别「物流丢件转人工」并转交对应人工团队",
+      "topic": "shipping",
+      "triggers": [
+        "么办",
+        "怎么",
+        "物流",
+        "流丢",
+        "件怎",
+        "丢件"
+      ],
+      "action": "escalate",
+      "version": 1,
+      "enabled": true,
+      "path": "pb_shipping_esc.md"
+    }
+  ]
+}

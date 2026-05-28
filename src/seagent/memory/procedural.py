@@ -36,42 +36,70 @@ class Playbook:
 
 
 class ProceduralMemory:
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: Optional[str] = None, skill_store: Optional[object] = None):
+        """A procedural memory backed by either:
+
+          - the original jsonl ``path`` (default, fully backwards compatible)
+          - a ``skill_store`` (markdown skill files, see ``seagent.skills``).
+
+        When ``skill_store`` is provided, ``upsert`` / ``set_enabled`` /
+        ``retrieve`` / ``__len__`` and the ``playbooks`` list-view all delegate
+        to it; the jsonl ``path`` is ignored. When ``skill_store`` is ``None``
+        the original jsonl behaviour is preserved unchanged.
+        """
         self.path = path
-        self.playbooks: List[Playbook] = []
-        if path and os.path.exists(path):
+        self.skill_store = skill_store
+        self._playbooks: List[Playbook] = []
+        if skill_store is None and path and os.path.exists(path):
             self._load()
 
     # --- persistence ---
     def _load(self) -> None:
-        self.playbooks = []
+        self._playbooks = []
         with open(self.path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    self.playbooks.append(Playbook(**json.loads(line)))
+                    self._playbooks.append(Playbook(**json.loads(line)))
 
     def _persist(self) -> None:
         if not self.path:
             return
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
-            for p in self.playbooks:
+            for p in self._playbooks:
                 f.write(json.dumps(asdict(p), ensure_ascii=False) + "\n")
 
     # --- governance api ---
+    @property
+    def playbooks(self) -> List[Playbook]:
+        if self.skill_store is not None:
+            return self.skill_store.playbooks
+        return self._playbooks
+
+    @playbooks.setter
+    def playbooks(self, value: List[Playbook]) -> None:
+        # Preserved for any legacy caller that assigns to .playbooks directly
+        # (none in-tree). Only meaningful in jsonl mode.
+        self._playbooks = list(value)
+
     def upsert(self, pb: Playbook) -> None:
-        for i, ex in enumerate(self.playbooks):
+        if self.skill_store is not None:
+            self.skill_store.upsert(pb)
+            return
+        for i, ex in enumerate(self._playbooks):
             if ex.playbook_id == pb.playbook_id:
                 pb.version = ex.version + 1
-                self.playbooks[i] = pb
+                self._playbooks[i] = pb
                 self._persist()
                 return
-        self.playbooks.append(pb)
+        self._playbooks.append(pb)
         self._persist()
 
     def set_enabled(self, playbook_id: str, enabled: bool) -> bool:
-        for p in self.playbooks:
+        if self.skill_store is not None:
+            return self.skill_store.set_enabled(playbook_id, enabled)
+        for p in self._playbooks:
             if p.playbook_id == playbook_id:
                 p.enabled = enabled
                 self._persist()
@@ -79,13 +107,17 @@ class ProceduralMemory:
         return False
 
     def __len__(self) -> int:
-        return len(self.playbooks)
+        if self.skill_store is not None:
+            return len(self.skill_store)
+        return len(self._playbooks)
 
     # --- retrieval ---
     def retrieve(self, query: str, top_k: int = 2) -> List[Passage]:
+        if self.skill_store is not None:
+            return self.skill_store.retrieve(query, top_k=top_k)
         q = set(tokenize(query))
         scored = []
-        for p in self.playbooks:
+        for p in self._playbooks:
             if not p.enabled:
                 continue
             trig = set()
