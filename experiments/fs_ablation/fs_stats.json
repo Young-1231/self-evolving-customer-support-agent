@@ -1,0 +1,27 @@
+{
+  "fs_topic_date": {
+    "n_cases": 24,
+    "scheme": "topic_date",
+    "n_l0": 8,
+    "n_l1": 21,
+    "l0_sizes": {
+      "account_security": 3,
+      "integrations_api": 5,
+      "billing": 5,
+      "data_export": 2,
+      "permissions": 1,
+      "mobile_app": 2,
+      "troubleshooting": 2,
+      "general": 4
+    }
+  },
+  "fs_flat": {
+    "n_cases": 24,
+    "scheme": "flat",
+    "n_l0": 1,
+    "n_l1": 1,
+    "l0_sizes": {
+      "all": 24
+    }
+  }
+}
