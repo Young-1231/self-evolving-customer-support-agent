@@ -64,6 +64,10 @@ class GuardrailPipeline:
     # 入站(用户消息)与出站(模型回答)可独立配置; 出站若为 None 则跟随入站。
     pii_precision_mode: str = "strict"
     pii_precision_mode_output: Optional[str] = None
+    # 可选的 groundedness 检查器注入点 (P1, c18 真瓶颈修复).
+    # 默认 None -> 用 .groundedness.check_groundedness (确定性 n-gram, 旧行为).
+    # 可注入 LLMJudgeGroundedness 实例 (callable(answer, contexts) -> GroundednessResult).
+    groundedness_checker: Optional[object] = None
 
     # ---------------- 入站 ----------------
     def check_input(self, user_text: str) -> GuardrailReport:
@@ -99,10 +103,21 @@ class GuardrailPipeline:
     # ---------------- 出站 ----------------
     def check_output(self, answer: str, contexts: List[Passage]) -> GuardrailReport:
         """出站闸: groundedness + 合规策略 + PII 脱敏, 并给出最终动作。"""
-        ground = check_groundedness(
-            answer, contexts, tau=self.ground_tau,
-            min_supported_ratio=self.ground_min_supported,
-        )
+        if self.groundedness_checker is not None:
+            # injected checker (e.g. LLMJudgeGroundedness); we forward (answer, contexts)
+            # and trust whatever GroundednessResult it returns. soft-fail to neutral
+            # if the checker blows up, so a flaky judge can't crash the agent.
+            try:
+                ground = self.groundedness_checker.check(answer, contexts)  # type: ignore[union-attr]
+            except Exception:
+                ground = check_groundedness(answer, contexts,
+                                            tau=self.ground_tau,
+                                            min_supported_ratio=self.ground_min_supported)
+        else:
+            ground = check_groundedness(
+                answer, contexts, tau=self.ground_tau,
+                min_supported_ratio=self.ground_min_supported,
+            )
         violations = check_output_policy(answer, refund_cap=self.refund_cap)
 
         redacted_answer = answer
