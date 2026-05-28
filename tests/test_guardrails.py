@@ -133,6 +133,69 @@ def test_policy_clean_answer():
     assert vio == []
 
 
+# ---------------- v2.9: 上下文感知金额识别 ----------------
+# multi_intent 子答案普遍出现"订单号 #38294"等订单号字面, 旧版 _MONEY 会把这些
+# 编号当成金额并触发 refund_over_cap → bundle BLOCK。下列用例 lock 住新版行为。
+def test_policy_order_number_chinese_not_money():
+    # 包含"退款"语境 + 订单号 #38294 (> $1000), 但 38294 是订单号不是金额。
+    vio = check_output_policy(
+        "您的退款已受理, 请记录订单号 #38294, 客服会在 3 天内联系您。",
+        refund_cap=1000.0,
+    )
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_order_number_english_not_money():
+    vio = check_output_policy(
+        "Your refund for order #27501 is being processed and will be issued shortly.",
+        refund_cap=1000.0,
+    )
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_ticket_id_not_money():
+    vio = check_output_policy(
+        "已为您建立工单号 #99999, 退款进度可凭此号查询; ticket no 12345 同步同步给后台。",
+        refund_cap=1000.0,
+    )
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_user_id_not_money():
+    vio = check_output_policy(
+        "user id 123456789 申请退款, 已转交财务。",
+        refund_cap=1000.0,
+    )
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_strong_currency_still_triggers():
+    # $5000 退款 — 真金额超限, 必须触发。
+    vio = check_output_policy("没问题, 我们将退款 $5000 给您。", refund_cap=1000.0)
+    assert any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_under_cap_strong_currency_no_trigger():
+    # RMB 800 refund — 真金额但低于上限, 不应触发。
+    vio = check_output_policy("We will process RMB 800 refund within 3 days.", refund_cap=1000.0)
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_bare_number_in_refund_context_not_money():
+    # "退款 3 个工作日" — 3 是天数不是金额, 不应触发。
+    vio = check_output_policy("退款将在 3 个工作日内到账。", refund_cap=1000.0)
+    assert not any(v.rule == "refund_over_cap" for v in vio)
+
+
+def test_policy_order_and_real_refund_together():
+    # 订单号 + 真退款金额超限: 订单号不算, 但真金额仍应触发。
+    vio = check_output_policy(
+        "针对订单号 #38294, 我们将退款 ¥5000 元到您的账户。",
+        refund_cap=1000.0,
+    )
+    assert any(v.rule == "refund_over_cap" for v in vio)
+
+
 # ---------------- pipeline 端到端 ----------------
 def test_pipeline_input_blocks_injection():
     g = GuardrailPipeline()
