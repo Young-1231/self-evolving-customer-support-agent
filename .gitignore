@@ -34,3 +34,4 @@ experiments/tau2_smoke/
 .idea/
 *.swp
 .DS_Store
+.phoenix_data/

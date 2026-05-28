@@ -1,0 +1,79 @@
+{
+  "endpoint": "http://127.0.0.1:6007",
+  "projects": {
+    "exp_e_v4": {
+      "id": "UHJvamVjdDoz",
+      "total_spans": 1000,
+      "root_spans": 500,
+      "phase_span_counts": {
+        "generation": 500
+      },
+      "latency_ms": {
+        "n": 500,
+        "mean": 5655.549,
+        "p50": 4705.531,
+        "p95": 11190.57,
+        "p99": 14229.469,
+        "max": 20376.499
+      },
+      "cost_usd": {
+        "total": 0.0,
+        "mean": 0.0
+      },
+      "tokens": {
+        "input_total": 0,
+        "output_total": 0
+      },
+      "escalation_rate": 0.332,
+      "blocked_rate": 0.006,
+      "guardrail_verdicts": {
+        "allow": 429,
+        "escalate": 68,
+        "block": 3
+      },
+      "categories": {
+        "normal_easy": 284,
+        "normal_hard": 96,
+        "pii": 48,
+        "multilingual": 15,
+        "multi_intent": 47,
+        "injection": 10
+      }
+    },
+    "exp_d": {
+      "id": "UHJvamVjdDoy",
+      "total_spans": 1934,
+      "root_spans": 485,
+      "phase_span_counts": {
+        "guardrail": 483,
+        "retrieval": 482,
+        "generation": 232,
+        "critic": 252
+      },
+      "latency_ms": {
+        "n": 485,
+        "mean": 341.322,
+        "p50": 240.408,
+        "p95": 996.483,
+        "p99": 1493.91,
+        "max": 4192.08
+      },
+      "cost_usd": {
+        "total": 0.173678,
+        "mean": 0.000358
+      },
+      "tokens": {
+        "input_total": 364034,
+        "output_total": 68535
+      },
+      "escalation_rate": 0.6722,
+      "blocked_rate": 0.1897,
+      "guardrail_verdicts": {
+        "allow": 174,
+        "block": 92,
+        "escalate": 219
+      },
+      "categories": {}
+    }
+  }
+}
