@@ -35,10 +35,31 @@ final user-facing text.
 
 ``guardrail_mode``:
 
-* ``'merged'`` (default since v2.7): forces specialists to ``mode='core'``
+* ``'per_sub_aggregated'`` (default since v2.8): forces specialists to
+  ``mode='core'`` (raw sub-answer, no per-sub guard), then runs
+  ``guardrail.check_output`` on **each (sub_answer, sub_contexts)** pair
+  independently and AGGREGATES the verdicts:
+
+  - groundedness uses **any-supported = supported** (the merged bundle is
+    considered grounded if at least one sub-answer is fully supported by
+    its own contexts — each sub is self-consistent against its slice).
+  - PII redaction is applied per sub, then merged answers are stitched
+    from the per-sub ``redacted_answer`` to avoid surface accumulation.
+  - policy: ANY ``BLOCK`` -> bundle ``BLOCK``; else ANY ``REWRITE`` ->
+    bundle ``REWRITE``; else ``ALLOW``.
+  - escalate uses **majority vote**: bundle escalates only when
+    strictly more than half of subs escalate (or any block fires).
+
+  This restores the multi_intent resolution that ``'merged'`` killed by
+  judging an over-long concatenation against a union of unrelated
+  contexts, while keeping safety (PII redaction, per-sub policy).
+
+* ``'merged'``: v2.7 behaviour — forces specialists to ``mode='core'``
   for the multi-intent fan-out (warns if they were 'observed'), collects raw
   sub-answers, then runs ``self.guardrail.check_output`` on the merged
   answer once.  Input guardrail (if any) is also run once up front.
+  Negative finding: groundedness fires on concatenated answer vs union
+  contexts -> multi_intent res 0%.
 * ``'per_sub'``: legacy v2.3 behaviour — specialists' own pipeline runs
   whatever guardrail they have wired in; orchestrator does not re-guard.
   Use to reproduce Exp E observed.
@@ -65,7 +86,7 @@ from .specialist import SpecialistAgent
 
 _MAX_FANOUT_WORKERS = 4  # protect downstream provider QPS per ticket
 
-_VALID_GUARDRAIL_MODES = ("merged", "per_sub", "none")
+_VALID_GUARDRAIL_MODES = ("per_sub_aggregated", "merged", "per_sub", "none")
 
 
 class MultiAgentOrchestrator:
@@ -78,7 +99,7 @@ class MultiAgentOrchestrator:
         default_specialist: str = "general",
         max_fanout_workers: int = _MAX_FANOUT_WORKERS,
         guardrail: Optional[object] = None,
-        guardrail_mode: str = "merged",
+        guardrail_mode: str = "per_sub_aggregated",
     ) -> None:
         if not specialists:
             raise ValueError("specialists must be non-empty")
@@ -99,22 +120,23 @@ class MultiAgentOrchestrator:
         self.guardrail = guardrail
         self.guardrail_mode = guardrail_mode
 
-        # v2.7: when guardrail_mode='merged' and specialists were built in
-        # mode='observed', their per-sub guardrail would double-fire and
-        # defeat the whole point.  Downgrade in-place (warn) so the user
-        # gets a consistent state regardless of how they wired things up.
-        if guardrail_mode == "merged":
+        # v2.7/v2.8: when guardrail_mode is 'merged' or 'per_sub_aggregated' and
+        # specialists were built in mode='observed', their per-sub guardrail
+        # would double-fire and defeat the whole point.  Downgrade in-place
+        # (warn) so the user gets a consistent state regardless of how they
+        # wired things up.
+        if guardrail_mode in ("merged", "per_sub_aggregated"):
             self._downgrade_specialists_for_merged()
-        # 'merged' mode requires a guardrail instance to actually run the
-        # check.  If none was provided, fall back to 'none' silently — the
-        # orchestrator still merges, just doesn't guard.  We warn so this
-        # isn't quietly the wrong thing in production.
-        if guardrail_mode == "merged" and guardrail is None:
+        # 'merged'/'per_sub_aggregated' both need a guardrail instance to
+        # actually run check_output.  If none was provided, the orchestrator
+        # still merges but doesn't guard.  Warn so this isn't quietly the
+        # wrong thing in production.
+        if guardrail_mode in ("merged", "per_sub_aggregated") and guardrail is None:
             warnings.warn(
-                "guardrail_mode='merged' but guardrail=None — no output "
-                "guardrail will run on the merged answer. "
-                "Pass guardrail=GuardrailPipeline(...) or set "
-                "guardrail_mode='none' to silence this warning.",
+                f"guardrail_mode={guardrail_mode!r} but guardrail=None — no "
+                f"output guardrail will run. "
+                f"Pass guardrail=GuardrailPipeline(...) or set "
+                f"guardrail_mode='none' to silence this warning.",
                 RuntimeWarning,
                 stacklevel=2,
             )
@@ -125,6 +147,10 @@ class MultiAgentOrchestrator:
         self.n_specialist_errors = 0
         self.n_merged_guard_block = 0
         self.n_merged_guard_escalate = 0
+        # v2.8 per_sub_aggregated counters
+        self.n_agg_block = 0
+        self.n_agg_escalate = 0
+        self.n_agg_rewrite = 0
         self._stats_lock = threading.Lock()
 
     def _downgrade_specialists_for_merged(self) -> None:
@@ -144,9 +170,9 @@ class MultiAgentOrchestrator:
                     pass
         if downgraded:
             warnings.warn(
-                f"guardrail_mode='merged' downgraded specialists "
+                f"guardrail_mode={self.guardrail_mode!r} downgraded specialists "
                 f"{downgraded} from mode='observed' to mode='core' so the "
-                f"merged guardrail isn't double-fired per sub-answer.",
+                f"orchestrator-level guardrail isn't double-fired per sub-answer.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -164,10 +190,13 @@ class MultiAgentOrchestrator:
             intents = [SubIntent(label=self.default_specialist, sub_query=query, confidence=0.0)]
 
         if len(intents) == 1:
-            # Single intent: no fan-out, no merged guardrail. The specialist's
-            # own pipeline (incl. its own guardrail if mode='observed') handles
-            # the request.  This keeps the v2.3 fast path unchanged.
+            # Single intent: no fan-out, no aggregated/merged guardrail. The
+            # specialist's own pipeline (incl. its own guardrail if
+            # mode='observed') handles the request.  This keeps the v2.3 fast
+            # path unchanged for all guardrail modes.
             return self._dispatch_single(query, intents[0])
+        if self.guardrail_mode == "per_sub_aggregated":
+            return self._dispatch_many_per_sub_aggregated(query, intents)
         if self.guardrail_mode == "merged":
             return self._dispatch_many_merged(query, intents)
         # 'per_sub' and 'none' both use the legacy fan-out (specialists do
@@ -268,6 +297,244 @@ class MultiAgentOrchestrator:
                     pass
         try:
             setattr(out, "merged_guardrail_action", action)
+        except Exception:
+            pass
+        return out
+
+    # ---- multi-intent path with per-sub aggregated guardrail (v2.8 default) ----
+    def _dispatch_many_per_sub_aggregated(
+        self, query: str, intents: List[SubIntent]
+    ) -> AgentResult:
+        """v2.8: run guardrail.check_output PER sub-answer (with its own
+        contexts), then aggregate verdicts before producing the final
+        AgentResult.
+
+        Aggregation:
+          - groundedness: any-supported = supported.  At least one sub fully
+            grounded by its own contexts means the bundle's grounded
+            (concatenated answer is a structural join of N self-consistent
+            pieces; we cannot judge it against the union and expect any
+            single sub to "carry" the whole text).
+          - PII: redact per sub; merge from per-sub redacted_answer to avoid
+            surface accumulation.
+          - policy: ANY BLOCK -> BLOCK; else ANY REWRITE -> REWRITE; else ALLOW.
+          - escalate: majority vote on ESCALATE action (>50% of subs).  ANY
+            BLOCK always escalates.
+        """
+        guard = self.guardrail
+
+        # 1) input guardrail (run once on the *original* query)
+        query_safe = query
+        if guard is not None:
+            try:
+                inp = guard.check_input(query)
+                if getattr(inp, "blocked", False):
+                    return AgentResult(
+                        query=query,
+                        answer="抱歉，您的请求无法处理，已为您转接人工客服。",
+                        escalate=True,
+                        confidence=0.0,
+                        contexts=[],
+                        used_sources=[],
+                        guardrail=inp,
+                    )
+                query_safe = getattr(inp, "redacted_text", "") or query
+            except Exception:
+                query_safe = query
+
+        # 2) fan-out (specialists already downgraded to 'core' in __init__)
+        results, errors = self._fanout(intents, query_override=query_safe)
+
+        # 3) per-sub guardrail.check_output(sub_answer, sub_contexts)
+        sub_reports: List[Optional[object]] = [None] * len(results)
+        if guard is not None:
+            for i, r in enumerate(results):
+                if r is None or not (r.answer or "").strip():
+                    continue
+                try:
+                    sub_reports[i] = guard.check_output(
+                        r.answer, list(r.contexts or [])
+                    )
+                except Exception:
+                    sub_reports[i] = None
+
+        # 4) aggregate verdicts and assemble merged answer using per-sub
+        #    redacted text where available
+        parts: List[str] = []
+        all_contexts: List[Passage] = []
+        seen_ctx = set()
+        used_sources: set = set()
+        confs: List[float] = []
+        n_ok = 0
+        n_block = 0
+        n_rewrite = 0
+        n_escalate_signal = 0
+        any_supported = False
+        any_ground_seen = False
+        sub_pii_entities: set = set()
+
+        # final aggregated guardrail uses the FIRST sub's report as a template
+        # for stage/violations bookkeeping; we synthesise a fresh
+        # GuardrailReport at the bottom if guard ran.
+        for idx, (si, r, rep, err) in enumerate(
+            zip(intents, results, sub_reports, errors), start=1
+        ):
+            label = si.label
+            if r is None:
+                parts.append(
+                    f"针对您的第 {idx} 个问题（{label}）：很抱歉，处理时遇到内部错误，"
+                    f"已为您转接人工客服。"
+                )
+                confs.append(0.0)
+                n_escalate_signal += 1
+                continue
+            n_ok += 1
+            confs.append(float(r.confidence))
+            # We do NOT fold the specialist's own r.escalate into the bundle
+            # vote: that flag is already represented through its
+            # groundedness / policy output. Counting it twice (here AND via
+            # the per-sub guardrail report) is what blew up Exp E observed
+            # (any-sub-fails -> whole-ticket-fails).
+            for src in r.used_sources or []:
+                used_sources.add(src)
+            for p in r.contexts or []:
+                key = (p.source, p.ref)
+                if key not in seen_ctx:
+                    seen_ctx.add(key)
+                    all_contexts.append(p)
+
+            # pick the per-sub answer (prefer redacted if guardrail ran)
+            sub_answer = (r.answer or "").strip()
+            if rep is not None:
+                redacted = getattr(rep, "redacted_answer", "") or ""
+                if redacted:
+                    sub_answer = redacted
+                # per-sub policy aggregation
+                action = str(getattr(rep, "action", "ALLOW")).upper()
+                if action == "BLOCK":
+                    n_block += 1
+                elif action == "REWRITE":
+                    n_rewrite += 1
+                elif action == "ESCALATE":
+                    n_escalate_signal += 1
+                # per-sub groundedness aggregation (any-supported)
+                ground = getattr(rep, "groundedness", None)
+                if ground is not None:
+                    any_ground_seen = True
+                    if getattr(ground, "supported", False):
+                        any_supported = True
+                # collect pii entities for the aggregated report
+                for span in getattr(rep, "pii_spans", []) or []:
+                    ent = getattr(span, "entity", None)
+                    if ent:
+                        sub_pii_entities.add(ent)
+            parts.append(f"针对您的第 {idx} 个问题（{label}）：\n{sub_answer}")
+
+        merged_answer = "\n\n".join(parts) if parts else ""
+        confidence = min(confs) if confs else 0.0
+        if n_ok == 0:
+            n_escalate_signal = max(n_escalate_signal, len(intents))
+
+        # bundle policy decision
+        if n_block > 0:
+            bundle_action = "BLOCK"
+            bundle_escalate = True
+        else:
+            # majority escalate vote: strictly more than half of subs
+            majority_escalate = (
+                len(results) > 0
+                and n_escalate_signal > len(results) / 2
+            )
+            # groundedness aggregation: any-supported.  If guardrail never
+            # ran (guard=None) we have no groundedness signal -> treat as
+            # not requiring escalation on groundedness grounds.
+            ground_fail = any_ground_seen and not any_supported
+            if majority_escalate or ground_fail:
+                bundle_action = "ESCALATE"
+                bundle_escalate = True
+            elif n_rewrite > 0:
+                bundle_action = "REWRITE"
+                bundle_escalate = False
+            else:
+                bundle_action = "ALLOW"
+                bundle_escalate = False
+
+        # build an aggregated GuardrailReport when at least one sub-report exists
+        aggregated_report = None
+        if guard is not None and any(rep is not None for rep in sub_reports):
+            try:
+                from ..guardrails.pipeline import GuardrailReport
+                reasons: List[str] = []
+                if n_block:
+                    reasons.append(f"agg_policy_block: {n_block}/{len(results)} subs")
+                if n_rewrite and bundle_action == "REWRITE":
+                    reasons.append(f"agg_policy_rewrite: {n_rewrite}/{len(results)} subs")
+                if any_ground_seen and not any_supported:
+                    reasons.append(
+                        f"agg_low_groundedness: 0/{sum(1 for rep in sub_reports if rep is not None and getattr(rep, 'groundedness', None) is not None)} subs supported"
+                    )
+                if (
+                    bundle_action == "ESCALATE"
+                    and n_escalate_signal > len(results) / 2
+                ):
+                    reasons.append(
+                        f"agg_majority_escalate: {n_escalate_signal}/{len(results)} subs"
+                    )
+                if sub_pii_entities:
+                    reasons.append(
+                        f"agg_output_pii_redacted: {sorted(sub_pii_entities)}"
+                    )
+                aggregated_report = GuardrailReport(
+                    stage="output",
+                    passed=(bundle_action == "ALLOW" and not sub_pii_entities),
+                    action=bundle_action.lower() if bundle_action != "ALLOW" else "allow",
+                    blocked=(bundle_action == "BLOCK"),
+                    reasons=reasons,
+                    redacted_answer=merged_answer,
+                )
+            except Exception:
+                aggregated_report = None
+
+        # counters
+        if bundle_action == "BLOCK":
+            with self._stats_lock:
+                self.n_agg_block += 1
+        elif bundle_action == "ESCALATE":
+            with self._stats_lock:
+                self.n_agg_escalate += 1
+        elif bundle_action == "REWRITE":
+            with self._stats_lock:
+                self.n_agg_rewrite += 1
+
+        out = AgentResult(
+            query=query,
+            answer=merged_answer,
+            escalate=bundle_escalate,
+            confidence=confidence,
+            contexts=all_contexts,
+            used_sources=sorted(used_sources),
+            guardrail=aggregated_report,
+            trace_id=next(
+                (r.trace_id for r in results if r is not None and getattr(r, "trace_id", None)),
+                None,
+            ),
+        )
+        try:
+            setattr(out, "sub_intents", [si.to_dict() for si in intents])
+            setattr(out, "n_sub_errors", sum(1 for e in errors if e is not None))
+            setattr(out, "agg_guardrail_action", bundle_action)
+            setattr(
+                out, "agg_sub_breakdown",
+                {
+                    "n_subs": len(results),
+                    "n_ok": n_ok,
+                    "n_block": n_block,
+                    "n_rewrite": n_rewrite,
+                    "n_escalate_signal": n_escalate_signal,
+                    "any_supported": any_supported,
+                    "any_ground_seen": any_ground_seen,
+                },
+            )
         except Exception:
             pass
         return out
@@ -404,6 +671,9 @@ class MultiAgentOrchestrator:
                 "n_specialist_errors": self.n_specialist_errors,
                 "n_merged_guard_block": self.n_merged_guard_block,
                 "n_merged_guard_escalate": self.n_merged_guard_escalate,
+                "n_agg_block": self.n_agg_block,
+                "n_agg_escalate": self.n_agg_escalate,
+                "n_agg_rewrite": self.n_agg_rewrite,
                 "router_calls": int(getattr(self.router, "n_calls", 0)),
                 "router_cache_hits": int(getattr(self.router, "n_cache_hits", 0)),
                 "router_parse_fail": int(getattr(self.router, "n_parse_fail", 0)),

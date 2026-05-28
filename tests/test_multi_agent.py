@@ -246,7 +246,13 @@ def _build_orchestrator(router_payload: str = None, router=None):
             router = IntentRouter(backend=None)
         else:
             router = IntentRouter(backend=_StubBackend(router_payload))
-    return MultiAgentOrchestrator(router, specs, default_specialist="general"), specs
+    # legacy helper: pin guardrail_mode='none' so we don't emit the
+    # missing-guardrail warning and so the legacy fan-out (no merged/agg
+    # guardrail) is what these v2.3 tests assert.
+    return MultiAgentOrchestrator(
+        router, specs, default_specialist="general",
+        guardrail_mode="none",
+    ), specs
 
 
 def test_orchestrator_single_intent_fast_path():
@@ -447,11 +453,18 @@ def _build_orchestrator_v27(router_payload, *, guardrail_mode="merged",
     return orch, specs
 
 
-def test_orchestrator_guardrail_mode_default_is_merged():
-    """v2.7: new default guardrail_mode is 'merged'."""
-    payload = '{"intents":[{"label":"billing","sub_query":"x","confidence":0.9}]}'
-    orch, _ = _build_orchestrator(router_payload=payload)
-    assert orch.guardrail_mode == "merged"
+def test_orchestrator_guardrail_mode_default_is_per_sub_aggregated():
+    """v2.8: new default guardrail_mode is 'per_sub_aggregated'."""
+    kb = _mini_kb(); base = _agent_with(kb)
+    specs = {"general": SpecialistAgent.for_domain("general", base)}
+    # provide a guardrail so we don't trip the missing-guardrail warning
+    guard = _StubGuardrail()
+    orch = MultiAgentOrchestrator(
+        IntentRouter(backend=None), specs,
+        default_specialist="general",
+        guardrail=guard,
+    )
+    assert orch.guardrail_mode == "per_sub_aggregated"
 
 
 def test_orchestrator_guardrail_mode_rejects_invalid():
@@ -627,3 +640,279 @@ def test_orchestrator_merged_mode_warns_when_no_guardrail():
         MultiAgentOrchestrator(IntentRouter(backend=None), specs,
                                default_specialist="general",
                                guardrail=None, guardrail_mode="merged")
+
+
+# =============================================================================
+# v2.8: per_sub_aggregated guardrail tests
+# =============================================================================
+
+
+class _PerSubGuardrail:
+    """Test double that returns per-call configurable check_output verdicts.
+
+    Pass a list of (action, supported, redacted_answer, pii_entities) tuples;
+    successive check_output calls pop the next verdict (or repeat the last
+    one).  Used to drive the v2.8 aggregation logic deterministically.
+    """
+
+    def __init__(
+        self,
+        verdicts=None,
+        input_blocked=False,
+        redacted_input=None,
+    ):
+        from seagent.guardrails.pipeline import GuardrailReport
+        from seagent.guardrails.groundedness import GroundednessResult
+        from seagent.guardrails.pii import PiiSpan
+        self._Report = GuardrailReport
+        self._Ground = GroundednessResult
+        self._Span = PiiSpan
+        # verdicts: list of dicts with keys
+        #   action ("ALLOW"/"REWRITE"/"ESCALATE"/"BLOCK"),
+        #   supported (bool),
+        #   redacted_answer (str or None),
+        #   pii_entities (list[str])
+        self.verdicts = list(verdicts or [])
+        self.input_blocked = input_blocked
+        self.redacted_input = redacted_input
+        self.input_calls = []
+        self.output_calls = []
+        self._idx = 0
+
+    def check_input(self, user_text):
+        self.input_calls.append(user_text)
+        action = "BLOCK" if self.input_blocked else "ALLOW"
+        return self._Report(
+            stage="input", passed=not self.input_blocked,
+            action=action, blocked=self.input_blocked,
+            redacted_text=self.redacted_input if self.redacted_input is not None else user_text,
+        )
+
+    def check_output(self, answer, contexts):
+        self.output_calls.append((answer, list(contexts)))
+        if not self.verdicts:
+            v = {"action": "ALLOW", "supported": True,
+                 "redacted_answer": None, "pii_entities": []}
+        else:
+            v = self.verdicts[min(self._idx, len(self.verdicts) - 1)]
+            self._idx += 1
+        action = v.get("action", "ALLOW")
+        supported = v.get("supported", True)
+        redacted = v.get("redacted_answer")
+        if redacted is None:
+            redacted = answer
+        pii_entities = v.get("pii_entities") or []
+        spans = [
+            self._Span(entity=e, start=0, end=0, text="", placeholder=f"<{e}>")
+            for e in pii_entities
+        ]
+        ground = self._Ground(
+            score=1.0 if supported else 0.0,
+            supported=supported,
+            unsupported_claims=[] if supported else ["x"],
+            n_sentences=1,
+        )
+        return self._Report(
+            stage="output",
+            passed=(action == "ALLOW" and not pii_entities),
+            action=action.lower() if action != "ALLOW" else "allow",
+            blocked=(action == "BLOCK"),
+            redacted_answer=redacted,
+            pii_spans=spans,
+            groundedness=ground,
+        )
+
+
+def _multi_payload_3():
+    return (
+        '{"intents":['
+        '{"label":"billing","sub_query":"q1","confidence":0.9},'
+        '{"label":"account","sub_query":"q2","confidence":0.8},'
+        '{"label":"technical","sub_query":"q3","confidence":0.7}'
+        "]}"
+    )
+
+
+def test_orchestrator_per_sub_aggregated_runs_check_output_per_sub():
+    """v2.8: orchestrator must call check_output exactly N times (once per sub)
+    and exactly one check_input on the original query."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "ALLOW", "supported": True},
+        {"action": "ALLOW", "supported": True},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("three things")
+    assert len(guard.output_calls) == 3
+    assert len(guard.input_calls) == 1
+    assert res.escalate is False
+    assert getattr(res, "agg_guardrail_action", None) == "ALLOW"
+    # answer carries all three sub-prefixes
+    assert "针对您的第 1 个问题" in res.answer
+    assert "针对您的第 2 个问题" in res.answer
+    assert "针对您的第 3 个问题" in res.answer
+
+
+def test_orchestrator_per_sub_aggregated_any_supported_passes():
+    """v2.8: any-supported aggregation — 1 supported sub + 2 unsupported
+    must NOT escalate on groundedness."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "ALLOW", "supported": True},   # this one carries the bundle
+        {"action": "ALLOW", "supported": False},
+        {"action": "ALLOW", "supported": False},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("three things")
+    assert res.escalate is False
+    assert getattr(res, "agg_guardrail_action", None) == "ALLOW"
+    bd = getattr(res, "agg_sub_breakdown", {})
+    assert bd.get("any_supported") is True
+
+
+def test_orchestrator_per_sub_aggregated_all_unsupported_escalates():
+    """v2.8: if NO sub is supported (any_ground_seen=True, any_supported=False)
+    the bundle escalates on groundedness."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "ALLOW", "supported": False},
+        {"action": "ALLOW", "supported": False},
+        {"action": "ALLOW", "supported": False},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("three things")
+    assert res.escalate is True
+    assert getattr(res, "agg_guardrail_action", None) == "ESCALATE"
+    assert orch.stats()["n_agg_escalate"] == 1
+
+
+def test_orchestrator_per_sub_aggregated_any_block_blocks_bundle():
+    """v2.8: a single BLOCK verdict in any sub blocks the bundle and
+    forces escalate=True."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "ALLOW", "supported": True},
+        {"action": "BLOCK", "supported": True, "redacted_answer": "[BLOCKED]"},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("three things")
+    assert res.escalate is True
+    assert getattr(res, "agg_guardrail_action", None) == "BLOCK"
+    assert orch.stats()["n_agg_block"] == 1
+    # the redacted sub-answer should have surfaced into the merged text
+    assert "[BLOCKED]" in res.answer
+
+
+def test_orchestrator_per_sub_aggregated_majority_escalate_vote():
+    """v2.8: bundle escalates when STRICTLY MORE THAN HALF of subs vote
+    ESCALATE; 1/3 alone must not escalate."""
+    # 1 escalate / 3 -> NO bundle escalate (groundedness still ALLOW via any-supported)
+    guard1 = _PerSubGuardrail(verdicts=[
+        {"action": "ESCALATE", "supported": True},
+        {"action": "ALLOW", "supported": True},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch1, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard1,
+                                       guardrail_mode="per_sub_aggregated")
+    res1 = orch1.handle("three things")
+    assert res1.escalate is False
+    assert getattr(res1, "agg_guardrail_action", None) == "ALLOW"
+
+    # 2 escalate / 3 -> majority -> bundle escalate
+    guard2 = _PerSubGuardrail(verdicts=[
+        {"action": "ESCALATE", "supported": True},
+        {"action": "ESCALATE", "supported": True},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch2, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard2,
+                                       guardrail_mode="per_sub_aggregated")
+    res2 = orch2.handle("three things")
+    assert res2.escalate is True
+    assert getattr(res2, "agg_guardrail_action", None) == "ESCALATE"
+
+
+def test_orchestrator_per_sub_aggregated_pii_per_sub_redaction():
+    """v2.8: per-sub PII redacted_answer must be propagated into the
+    merged answer (not the raw sub-answer)."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "ALLOW", "supported": True,
+         "redacted_answer": "用户 [EMAIL] 的退款已处理。", "pii_entities": ["EMAIL"]},
+        {"action": "ALLOW", "supported": True},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("three things")
+    assert "[EMAIL]" in res.answer
+    # aggregated report keeps the union of PII entities in reasons
+    assert any("EMAIL" in r for r in (res.guardrail.reasons or []))
+
+
+def test_orchestrator_per_sub_aggregated_single_intent_skips_aggregation():
+    """v2.8: single-intent path bypasses the per-sub aggregation entirely
+    (no orchestrator-level check_output calls)."""
+    guard = _PerSubGuardrail()
+    payload = '{"intents":[{"label":"billing","sub_query":"q","confidence":0.9}]}'
+    orch, _ = _build_orchestrator_v27(payload, guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    orch.handle("q")
+    assert guard.output_calls == []
+    assert guard.input_calls == []
+
+
+def test_orchestrator_per_sub_aggregated_downgrades_observed_specialists():
+    """v2.8: just like 'merged', the new default also downgrades
+    observed-mode specialists to 'core'."""
+    guard = _PerSubGuardrail()
+    with pytest.warns(RuntimeWarning, match="downgraded specialists"):
+        orch, specs = _build_orchestrator_v27(
+            _multi_payload_3(),
+            guardrail=guard,
+            guardrail_mode="per_sub_aggregated",
+            specialist_mode="observed",
+        )
+    for label, spec in specs.items():
+        assert spec.mode == "core", f"{label} not downgraded"
+
+
+def test_orchestrator_per_sub_aggregated_input_block_short_circuits():
+    """v2.8: input-stage BLOCK returns canned escalation without ever
+    calling specialists or per-sub guardrails."""
+    guard = _PerSubGuardrail(input_blocked=True)
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    res = orch.handle("malicious")
+    assert res.escalate is True
+    assert res.confidence == 0.0
+    assert guard.output_calls == []
+    assert "人工客服" in res.answer
+
+
+def test_orchestrator_per_sub_aggregated_warns_when_no_guardrail():
+    """v2.8: per_sub_aggregated + no guardrail emits a RuntimeWarning at init."""
+    kb = _mini_kb(); base = _agent_with(kb)
+    specs = {"general": SpecialistAgent.for_domain("general", base)}
+    with pytest.warns(RuntimeWarning, match="no output guardrail"):
+        MultiAgentOrchestrator(IntentRouter(backend=None), specs,
+                               default_specialist="general",
+                               guardrail=None,
+                               guardrail_mode="per_sub_aggregated")
+
+
+def test_orchestrator_per_sub_aggregated_stats_counters():
+    """v2.8: per-mode counters n_agg_block/n_agg_escalate/n_agg_rewrite
+    are exposed via stats()."""
+    guard = _PerSubGuardrail(verdicts=[
+        {"action": "REWRITE", "supported": True},
+        {"action": "ALLOW", "supported": True},
+        {"action": "ALLOW", "supported": True},
+    ])
+    orch, _ = _build_orchestrator_v27(_multi_payload_3(), guardrail=guard,
+                                      guardrail_mode="per_sub_aggregated")
+    orch.handle("q")
+    s = orch.stats()
+    assert s["n_agg_rewrite"] == 1
+    assert s["n_agg_block"] == 0
+    assert s["n_agg_escalate"] == 0
